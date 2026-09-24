@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# IDE
+.idea/
+
+# Reflex: shared assets copied into the CWD when the component is imported
+# (tests), and the demo's frontend lockfile directory.
+/assets/
+perspective_demo/reflex.lock/

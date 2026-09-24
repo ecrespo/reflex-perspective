@@ -1,0 +1,104 @@
+name: Quality
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_call' }}
+
+env:
+  UV_LOCKED: "1"
+
+jobs:
+  lint:
+    name: Lint & format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.13"
+      - name: Ruff lint
+        run: uvx ruff@0.16.8 check --output-format=github .
+      - name: Ruff format
+        run: uvx ruff@0.16.8 format --check --diff .
+      - name: Parse the React bridge (JSX syntax check)
+        run: >
+          npx --yes esbuild@0.25
+          custom_components/reflex_perspective/perspective_viewer.jsx
+          --loader:.jsx=jsx --log-level=warning > /dev/null
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # perspective-python only ships wheels for 3.11+, so the server tests
+        # are skipped on 3.10 (client-only component still supported there).
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - name: Install
+        run: uv sync --extra dev
+      - name: Pytest
+        run: uv run pytest -ra
+
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.13"
+      - name: Build sdist + wheel
+        run: uv build
+      - name: Check metadata
+        run: uvx twine check --strict dist/*
+      - name: Check wheel contents
+        run: |
+          set -euo pipefail
+          files=$(unzip -Z1 dist/*.whl)
+          for f in __init__.py viewer.py viewer.pyi server.py perspective_viewer.jsx py.typed; do
+            echo "$files" | grep -qx "reflex_perspective/$f" || { echo "::error::missing reflex_perspective/$f in wheel"; exit 1; }
+          done
+      - name: Check versions are in sync
+        run: |
+          set -euo pipefail
+          py=$(grep -m1 '^version' pyproject.toml | cut -d'"' -f2)
+          mod=$(grep -m1 '^__version__' custom_components/reflex_perspective/__init__.py | cut -d'"' -f2)
+          [ "$py" = "$mod" ] || { echo "::error::pyproject ($py) != __version__ ($mod)"; exit 1; }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  demo:
+    name: Compile demo app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - name: Install
+        run: uv sync --extra dev
+      - name: reflex compile
+        working-directory: perspective_demo
+        run: uv run --project .. reflex compile --no-rich
