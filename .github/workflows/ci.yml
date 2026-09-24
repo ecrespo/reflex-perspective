@@ -69,6 +69,17 @@ jobs:
         run: uv build
       - name: Check metadata
         run: uvx twine check --strict dist/*
+      - name: Check classifiers are valid (PyPI rejects unknown ones)
+        run: |
+          uv run --no-project --with trove-classifiers python - <<'PY'
+          import sys, tomllib
+          from trove_classifiers import classifiers
+          declared = tomllib.load(open("pyproject.toml", "rb"))["project"]["classifiers"]
+          bad = [c for c in declared if c not in classifiers]
+          for c in bad:
+              print(f"::error::unknown classifier: {c}")
+          sys.exit(1 if bad else 0)
+          PY
       - name: Check wheel contents
         run: |
           set -euo pipefail
