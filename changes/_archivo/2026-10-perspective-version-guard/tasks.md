@@ -25,4 +25,4 @@
 | REQ | Tareas | Verificación |
 |---|---|---|
 | REQ-VER-004 | V-001 | `tests/test_versions.py` (repo, `5.5.0`, pin ausente) + paso de CI |
-| REQ-VER-005 | V-002 | `test_dependabot_ignores_perspective_python` |
+| REQ-VER-005 | V-002 | `test_dependabot_ignores_perspective_python`; GitHub validó el archivo (check `.github/dependabot.yml` en PR #4) |
