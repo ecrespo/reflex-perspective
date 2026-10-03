@@ -575,3 +575,100 @@ def test_read_only_python_writes_still_work():
         assert t.size() == 2
         hub.clear("t")
         assert t.size() == 0
+
+
+# ------------------------------------------------------------------ public API
+class FakeApp:
+    api_transformer = None
+
+
+def test_params_pass_through_mount_and_api():
+    """REQ-SRV-017: perspective_api() and mount() forward the new options."""
+    hub = seeded_hub()
+    api = ps.perspective_api(hub=hub, read_only=True, write_close_code=4403)
+    with TestClient(api) as client, client.websocket_connect("/perspective") as ws:
+        ws.send_bytes(frame("update"))
+        assert close_code(ws) == 4403
+
+    app = FakeApp()
+    ps.mount(app, hub=hub, authorize=lambda ws: 4401)
+    with (
+        TestClient(app.api_transformer) as client,
+        client.websocket_connect("/perspective") as ws,
+    ):
+        assert close_code(ws) == 4401
+    assert hub.size("t") == 1
+
+
+@pytest.mark.parametrize(
+    "func",
+    [
+        ps.PerspectiveHub.serve,
+        ps.PerspectiveHub.asgi_app,
+        ps.perspective_api,
+        ps.mount,
+    ],
+)
+def test_defaults_unchanged(func):
+    """REQ-SRV-017: new options are keyword-only with 0.1.0 behavior by default."""
+    import inspect
+
+    params = inspect.signature(func).parameters
+    new = {
+        "authorize": None,
+        "read_only": False,
+        "write_close_code": 4409,
+        "read_variants": None,
+    }
+    for name, default in new.items():
+        assert params[name].kind is inspect.Parameter.KEYWORD_ONLY, name
+        assert params[name].default == default, name
+    positional = [
+        n for n, p in params.items() if p.kind is not inspect.Parameter.KEYWORD_ONLY
+    ]
+    assert positional[-2:] == ["executor", "allowed_origins"]
+
+
+@pytest.mark.parametrize("code", [1000, 1008, 3999, 5000, True])
+@pytest.mark.parametrize("build", ["asgi_app", "perspective_api", "mount"])
+def test_invalid_write_close_code(build, code):
+    """REQ-SRV-018: write_close_code outside 4000-4999 fails at build time."""
+    hub = make_hub()
+    builders = {
+        "asgi_app": lambda: hub.asgi_app(read_only=True, write_close_code=code),
+        "perspective_api": lambda: ps.perspective_api(
+            hub=hub, read_only=True, write_close_code=code
+        ),
+        "mount": lambda: ps.mount(
+            FakeApp(), hub=hub, read_only=True, write_close_code=code
+        ),
+    }
+    with pytest.raises(ValueError, match="write_close_code"):
+        builders[build]()
+
+
+@pytest.mark.parametrize("build", ["asgi_app", "perspective_api", "mount"])
+def test_read_only_unverified_version_fails_at_build(build, monkeypatch):
+    """REQ-SRV-015: the version check runs when the app is built."""
+    monkeypatch.setattr(ps, "_installed_perspective_version", lambda: "9.9.9")
+    hub = make_hub()
+    builders = {
+        "asgi_app": lambda: hub.asgi_app(read_only=True),
+        "perspective_api": lambda: ps.perspective_api(hub=hub, read_only=True),
+        "mount": lambda: ps.mount(FakeApp(), hub=hub, read_only=True),
+    }
+    with pytest.raises(RuntimeError, match=r"9\.9\.9"):
+        builders[build]()
+    hub.asgi_app(read_only=True, read_variants={8})  # explicit table is fine
+
+
+def test_classifier_is_public():
+    """REQ-SRV-017: apps composing their own handler reuse the classifier."""
+    for name in [
+        "READ_VARIANTS",
+        "WRITE_CLOSE_CODE",
+        "WRITE_VARIANT_NAMES",
+        "is_read_request",
+        "request_variant",
+    ]:
+        assert name in ps.__all__

@@ -212,6 +212,20 @@ def _verified_read_variants() -> frozenset[int]:
         raise RuntimeError(msg) from None
 
 
+def _read_only_reads(
+    read_only: bool, write_close_code: int, read_variants: Collection[int] | None
+) -> frozenset[int] | None:
+    """Validate the read-only options; the allowed reads, or ``None`` when off."""
+    if not (type(write_close_code) is int and 4000 <= write_close_code <= 4999):
+        msg = f"write_close_code must be in 4000-4999, got {write_close_code!r}"
+        raise ValueError(msg)
+    if not read_only:
+        return None
+    if read_variants is None:
+        return _verified_read_variants()
+    return frozenset(read_variants)
+
+
 def is_read_request(
     payload: bytes, read_variants: Collection[int] | None = None
 ) -> bool:
@@ -449,13 +463,7 @@ class PerspectiveHub:
                 ``perspective-python`` and raises ``RuntimeError`` if that
                 version has no verified table.
         """
-        allowed_reads: frozenset[int] | None = None
-        if read_only:
-            allowed_reads = (
-                _verified_read_variants()
-                if read_variants is None
-                else frozenset(read_variants)
-            )
+        allowed_reads = _read_only_reads(read_only, write_close_code, read_variants)
 
         allowed = (
             _default_allowed_origins() if allowed_origins is None else allowed_origins
@@ -545,9 +553,15 @@ class PerspectiveHub:
         """A Starlette app exposing this hub's WebSocket at ``path``.
 
         Pass it to ``rx.App(api_transformer=...)``; Reflex mounts itself below
-        it, so all regular routes keep working. See :meth:`serve` for
-        ``executor``, ``allowed_origins`` and ``authorize``.
+        it, so all regular routes keep working. See :meth:`serve` for the
+        options.
+
+        Raises:
+            ValueError: ``write_close_code`` outside 4000-4999.
+            RuntimeError: ``read_only=True`` without ``read_variants`` on a
+                ``perspective-python`` version with no verified read table.
         """
+        _read_only_reads(read_only, write_close_code, read_variants)
 
         async def endpoint(websocket: WebSocket) -> None:
             await self.serve(
@@ -581,15 +595,28 @@ def perspective_api(
     hub: PerspectiveHub | None = None,
     executor: Executor | None = None,
     allowed_origins: Sequence[str] | None = None,
+    *,
+    authorize: Authorize | None = None,
+    read_only: bool = False,
+    write_close_code: int = WRITE_CLOSE_CODE,
+    read_variants: Collection[int] | None = None,
 ) -> Starlette:
     """Build the ``api_transformer`` that serves Perspective at ``path``.
 
+    See :meth:`PerspectiveHub.serve` for the options.
+
     Example::
 
-        app = rx.App(api_transformer=perspective_api())
+        app = rx.App(api_transformer=perspective_api(read_only=True))
     """
     return (hub or get_hub()).asgi_app(
-        path=path, executor=executor, allowed_origins=allowed_origins
+        path=path,
+        executor=executor,
+        allowed_origins=allowed_origins,
+        authorize=authorize,
+        read_only=read_only,
+        write_close_code=write_close_code,
+        read_variants=read_variants,
     )
 
 
@@ -599,17 +626,29 @@ def mount(
     hub: PerspectiveHub | None = None,
     executor: Executor | None = None,
     allowed_origins: Sequence[str] | None = None,
+    *,
+    authorize: Authorize | None = None,
+    read_only: bool = False,
+    write_close_code: int = WRITE_CLOSE_CODE,
+    read_variants: Collection[int] | None = None,
 ) -> PerspectiveHub:
     """Add the Perspective WebSocket to an existing ``rx.App``.
 
-    Keeps any ``api_transformer`` already configured.
+    Keeps any ``api_transformer`` already configured. See
+    :meth:`PerspectiveHub.serve` for the options.
 
     Returns:
         The hub serving the endpoint.
     """
     the_hub = hub or get_hub()
     transformer = the_hub.asgi_app(
-        path=path, executor=executor, allowed_origins=allowed_origins
+        path=path,
+        executor=executor,
+        allowed_origins=allowed_origins,
+        authorize=authorize,
+        read_only=read_only,
+        write_close_code=write_close_code,
+        read_variants=read_variants,
     )
     current = app.api_transformer
     if current is None:
@@ -650,10 +689,15 @@ def run_periodically(
 
 __all__ = [
     "DEFAULT_PATH",
+    "READ_VARIANTS",
+    "WRITE_CLOSE_CODE",
+    "WRITE_VARIANT_NAMES",
     "PerspectiveHub",
     "get_hub",
+    "is_read_request",
     "mount",
     "origin_allowed",
     "perspective_api",
+    "request_variant",
     "run_periodically",
 ]

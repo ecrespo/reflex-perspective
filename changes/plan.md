@@ -14,7 +14,7 @@ Estados: `[ ]` pendiente · `[~]` en curso · `[x]` hecha · `[!]` bloqueada.
 | 2 · Clasificador | `[x]` | T-001 (+ helper A-10) | `request_variant`, `is_read_request`, `READ_VARIANTS`, `WRITE_VARIANT_NAMES`, `WRITE_CLOSE_CODE`; helper de pruebas con `perspective.Client` | 0 | Pruebas del clasificador en verde |
 | 3 · Contrato y `authorize` | `[x]` | T-002 ∥ T-003 | Prueba de contrato (REQ-VER-003); `authorize` en `serve()` (DD-005/006) | 2 | Pruebas de `authorize` y `-k contract` en verde |
 | 4 · `read_only` | `[x]` | T-004 | Clasificación por frame, 4409, guardia de versión, `read_variants` | 2, 3 | Pruebas `test_read_only_*` en verde |
-| 5 · API pública | `[ ]` | T-005 | Parámetros en `asgi_app`/`perspective_api`/`mount`; validaciones; `__all__` | 3, 4 | `test_defaults_unchanged`, ruff limpio |
+| 5 · API pública | `[x]` | T-005 | Parámetros en `asgi_app`/`perspective_api`/`mount`; validaciones; `__all__` | 3, 4 | `test_defaults_unchanged`, ruff limpio |
 | 6 · Validación y docs | `[ ]` | T-006 ∥ T-007 | Pase en navegador con la demo en sólo lectura; README; `CHANGELOG.md` | 5 | Sin 4409 en lectura; variantes anotadas |
 | 7 · Plegado SDD | `[ ]` | T-008, V-003 | Deltas en `specs/`; `0.2.0`; carpetas a `_archivo/` | 1, 6 | Quality y Security en verde; REQ en `specs/` |
 | 8 · Release 0.2.0 | `[ ]` | T-009 | PR a `main`, tag `v0.2.0` (el tag lo empuja el mantenedor) | 7 | 0.2.0 en PyPI y release en GitHub |
@@ -40,3 +40,4 @@ sólo se implementa tras aprobarla.
 | 2026-10-03 | 2 | hecha | `request_variant`, `is_read_request`, `READ_VARIANTS["5.5.1"]` (32 lecturas), `WRITE_VARIANT_NAMES`, `WRITE_CLOSE_CODE`; helper `Recorder` (A-10); 71 pruebas rojo → verde. Variantes del cliente oficial medidas = §2.2 |
 | 2026-10-03 | 3 | hecha | Contrato REQ-VER-003 (verificado: `PERSPECTIVE_VERSION="9.9.9"` lo hace fallar); `authorize` en `serve()`/`asgi_app()` (DD-005/006, 1011 ante excepción o código inválido); 11 pruebas rojo → verde. `perspective_api`/`mount` quedan para la fase 5 |
 | 2026-10-03 | 4 | hecha | `read_only`/`write_close_code`/`read_variants` en `serve()` y `asgi_app()`; 22 pruebas rojo → verde; control: el frame `size`+`update` real modifica la tabla sin `read_only` (A-01 reproducido) y se rechaza con él; 8 corridas seguidas sin intermitencias |
+| 2026-10-03 | 5 | hecha | Parámetros en `perspective_api`/`mount`; `ValueError` (`write_close_code`) y `RuntimeError` (versión) al construir; clasificador en `__all__`; 22 pruebas rojo → verde. Suite 160 en 3.13 y 16 + 2 omitidos en 3.10; wheel y `reflex compile` de la demo OK |

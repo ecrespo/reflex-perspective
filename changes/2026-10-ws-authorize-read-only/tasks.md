@@ -55,7 +55,7 @@
   el `TestClient`, usar un `perspective.Client` cuyo callback de envío escriba en el socket de
   prueba.
 
-### [ ] T-005 · Paso de parámetros y validaciones de construcción
+### [x] 2026-10-03 T-005 · Paso de parámetros y validaciones de construcción
 - **Qué**: `asgi_app`, `perspective_api`, `mount` aceptan y pasan `authorize`, `read_only`,
   `write_close_code`, `read_variants`; `ValueError` para `write_close_code` fuera de 4000–4999;
   `RuntimeError` de versión no verificada al construir; símbolos nuevos en `__all__`.
