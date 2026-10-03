@@ -29,10 +29,12 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+import importlib.metadata
 import logging
 import threading
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from concurrent.futures import Executor
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 try:
@@ -57,6 +59,144 @@ DEFAULT_PATH = "/perspective"
 
 # WebSocket close code for "policy violation" (RFC 6455 section 7.4.1).
 _WS_POLICY_VIOLATION = 1008
+
+WRITE_CLOSE_CODE = 4409
+"""Default close code for a frame refused in read-only mode."""
+
+# ``Request.client_req`` oneof variants that only read, per Perspective version
+# (``rust/perspective-client/perspective.proto``). Indexed by exact version so
+# an upgrade never runs read-only mode with another version's numbering.
+READ_VARIANTS: Mapping[str, frozenset[int]] = MappingProxyType(
+    {
+        "5.5.1": frozenset(
+            {
+                3,  # get_features_req
+                4,  # get_hosted_tables_req
+                5,  # table_make_port_req (sent by the viewer on connect)
+                6,  # table_make_view_req
+                7,  # table_schema_req
+                8,  # table_size_req
+                9,  # table_validate_expr_req
+                10,  # view_column_paths_req
+                11,  # view_delete_req
+                12,  # view_dimensions_req
+                13,  # view_expression_schema_req
+                14,  # view_get_config_req
+                15,  # view_schema_req
+                16,  # view_to_arrow_req
+                17,  # server_system_info_req
+                18,  # view_collapse_req
+                19,  # view_expand_req
+                20,  # view_get_min_max_req
+                21,  # view_on_update_req
+                22,  # view_remove_on_update_req
+                23,  # view_set_depth_req
+                24,  # view_to_columns_string_req
+                25,  # view_to_csv_req
+                26,  # view_to_rows_string_req
+                29,  # table_on_delete_req
+                30,  # table_remove_delete_req
+                34,  # view_on_delete_req
+                35,  # view_remove_delete_req
+                36,  # view_to_ndjson_string_req
+                37,  # remove_hosted_tables_update_req (sent on unmount)
+                39,  # view_on_remove_req
+                40,  # view_remove_on_remove_req
+            }
+        ),
+    }
+)
+
+WRITE_VARIANT_NAMES: Mapping[int, str] = MappingProxyType(
+    {
+        27: "make_table_req",
+        28: "table_delete_req",
+        31: "table_remove_req",
+        32: "table_replace_req",
+        33: "table_update_req",
+        38: "make_join_table_req",
+    }
+)
+"""Known write variants, for logs."""
+
+# ``Request`` envelope fields that are not part of the ``client_req`` oneof.
+_ENVELOPE_FIELDS = frozenset({1, 2})  # msg_id, entity_id
+_WIRE_VARINT, _WIRE_I64, _WIRE_LEN, _WIRE_I32 = 0, 1, 2, 5
+
+
+def _read_varint(buf: bytes, pos: int) -> tuple[int, int]:
+    value = shift = 0
+    while True:
+        if pos >= len(buf) or shift > 63:
+            msg = "truncated varint"
+            raise ValueError(msg)
+        byte = buf[pos]
+        pos += 1
+        value |= (byte & 0x7F) << shift
+        shift += 7
+        if not byte & 0x80:
+            return value, pos
+
+
+def request_variant(payload: bytes) -> int | None:
+    """Field number of the single ``client_req`` variant of a ``Request`` frame.
+
+    Walks every top-level protobuf tag instead of stopping at the first one:
+    in a ``oneof`` the last field wins, so a read placed before a write would
+    otherwise smuggle the write through. Anything that is not exactly one
+    length-delimited variant besides ``msg_id``/``entity_id`` (a second field,
+    an unknown wire type, a length past the end, truncation) returns ``None``.
+    """
+    variant: int | None = None
+    pos = 0
+    try:
+        while pos < len(payload):
+            key, pos = _read_varint(payload, pos)
+            field, wire = key >> 3, key & 0x07
+            if field == 0:
+                return None
+            if wire == _WIRE_VARINT:
+                _, pos = _read_varint(payload, pos)
+            elif wire == _WIRE_LEN:
+                length, pos = _read_varint(payload, pos)
+                pos += length
+            elif wire == _WIRE_I64:
+                pos += 8
+            elif wire == _WIRE_I32:
+                pos += 4
+            else:
+                return None
+            if pos > len(payload):
+                return None
+            if field in _ENVELOPE_FIELDS:
+                continue
+            if variant is not None or wire != _WIRE_LEN:
+                return None
+            variant = field
+    except ValueError:
+        return None
+    return variant
+
+
+def _verified_read_variants() -> frozenset[int]:
+    """Read table of the installed ``perspective-python``."""
+    version = importlib.metadata.version("perspective-python")
+    return READ_VARIANTS[version]
+
+
+def is_read_request(
+    payload: bytes, read_variants: Collection[int] | None = None
+) -> bool:
+    """Whether a ``Request`` frame is a known read (fails closed).
+
+    Args:
+        payload: A binary WebSocket frame from a Perspective client.
+        read_variants: Allowed variant numbers. ``None`` uses
+            :data:`READ_VARIANTS` for the installed ``perspective-python``.
+    """
+    allowed = _verified_read_variants() if read_variants is None else read_variants
+    variant = request_variant(payload)
+    return variant is not None and variant in allowed
 
 
 def _default_allowed_origins() -> Sequence[str]:

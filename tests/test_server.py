@@ -13,6 +13,101 @@ def make_hub():
     return ps.PerspectiveHub()
 
 
+class Recorder:
+    """Official ``perspective.Client`` on an in-process session that keeps every
+    request frame it sends (constitution Art. 2: real protocol messages)."""
+
+    def __init__(self):
+        self.server = perspective.Server()
+        self.frames: list[bytes] = []
+        session = self.server.new_session(
+            lambda resp: self.client.handle_response(resp)
+        )
+
+        def send(req):
+            self.frames.append(bytes(req))
+            session.handle_request(req)
+
+        self.client = perspective.Client(send)
+
+    def capture(self, fn):
+        start = len(self.frames)
+        fn()
+        return self.frames[start:]
+
+
+def official_frames():
+    """``{operation: (frames, expected variant)}`` sent by the official client."""
+    rec = Recorder()
+    c = rec.client
+    ops = {}
+
+    def op(name, variant, fn):
+        ops[name] = (rec.capture(fn), variant)
+
+    op("make_table", 27, lambda: c.table([{"id": 1, "x": 1.0}], name="t", index="id"))
+    t = c.open_table("t")
+    op("get_hosted_tables", 4, c.get_hosted_table_names)
+    op("size", 8, t.size)
+    op("schema", 7, t.schema)
+    op("validate_expressions", 9, lambda: t.validate_expressions({"e": '"x" + 1'}))
+    op("make_port", 5, t.make_port)
+    op("table_on_delete", 29, lambda: t.on_delete(lambda *a: None))
+    view = {}
+    op("view", 6, lambda: view.setdefault("v", t.view(group_by=["id"])))
+    v = view["v"]
+    op("to_arrow", 16, v.to_arrow)
+    op("to_csv", 25, v.to_csv)
+    op("to_json", 26, v.to_json)
+    op("to_columns", 24, v.to_columns)
+    op("dimensions", 12, v.dimensions)
+    op("view_schema", 15, v.schema)
+    op("get_config", 14, v.get_config)
+    op("expand", 19, lambda: v.expand(0))
+    op("collapse", 18, lambda: v.collapse(0))
+    op("min_max", 20, lambda: v.get_min_max("x"))
+    cb = {}
+    op("on_update", 21, lambda: cb.setdefault("u", v.on_update(lambda *a: None)))
+    op("remove_update", 22, lambda: v.remove_update(cb["u"]))
+    op("on_remove", 39, lambda: cb.setdefault("r", v.on_remove(lambda *a: None)))
+    op("view_on_delete", 34, lambda: v.on_delete(lambda *a: None))
+    op("system_info", 17, c.system_info)
+    op("view_delete", 11, v.delete)
+    op("update", 33, lambda: t.update([{"id": 2, "x": 2.0}]))
+    op("remove", 31, lambda: t.remove([2]))
+    op("replace", 32, lambda: t.replace([{"id": 3, "x": 3.0}]))
+    op("clear", 32, t.clear)
+    other = {}
+    op("other", 27, lambda: other.setdefault("o", c.table([{"id": 1}], name="o")))
+    op("table_delete", 28, other["o"].delete)
+    op("join", 38, lambda: c.join(t, c.table([{"id": 1, "y": 2}], name="p"), "id"))
+    return ops
+
+
+FRAMES = official_frames()
+WRITES = ["update", "remove", "replace", "clear", "make_table", "join", "table_delete"]
+READS = [n for n in FRAMES if n not in {*WRITES, "other"}]
+
+
+def frame(name: str) -> bytes:
+    """The single frame of a recorded operation (the one carrying its variant)."""
+    frames, variant = FRAMES[name]
+    return next(f for f in frames if ps.request_variant(f) == variant)
+
+
+# Hand-written frames: only for malformed or tampered input (Art. 2).
+SMUGGLED_WRITE = b"\x08\x07\x12\x01t\x42\x00" + b"\x8a\x02\x00"  # size + update
+UNKNOWN_VARIANT = b"\x08\x07\x9a\x06\x00"  # field 99
+MALFORMED = {
+    "truncated_varint": b"\x08\x80",
+    "length_overflow": b"\x08\x01\x42\x05ab",
+    "unknown_wire_type": b"\x08\x01\x43",
+    "variant_not_a_message": b"\x08\x01\x40\x01",
+    "field_zero": b"\x02\x00",
+    "no_variant": b"\x08\x01\x12\x01t",
+}
+
+
 def test_table_lifecycle():
     hub = make_hub()
     hub.table({"id": "integer", "v": "float"}, name="t", index="id")
@@ -122,3 +217,59 @@ def test_cache_drops_tables_deleted_elsewhere():
         hub.get_table("gone")
     hub.table([{"x": 1}, {"x": 2}], name="gone")
     assert hub.size("gone") == 2
+
+
+# ------------------------------------------------------- read-only classifier
+@pytest.mark.parametrize("name", list(FRAMES))
+def test_request_variant_matches_official_client(name):
+    """REQ-SRV-013: each official-client operation carries the expected variant."""
+    frames, variant = FRAMES[name]
+    assert variant in [ps.request_variant(f) for f in frames]
+
+
+@pytest.mark.parametrize("name", READS)
+def test_classifier_accepts_reads(name):
+    """REQ-SRV-013: reads of Perspective 5.5.1 are allowed."""
+    assert ps.is_read_request(frame(name))
+
+
+@pytest.mark.parametrize("name", WRITES)
+def test_classifier_rejects_writes(name):
+    """REQ-SRV-014: writes are not reads; their names are known for logs."""
+    assert not ps.is_read_request(frame(name))
+    assert ps.request_variant(frame(name)) in ps.WRITE_VARIANT_NAMES
+
+
+def test_classifier_rejects_smuggled_write():
+    """REQ-SRV-014: a read followed by a write in one frame is rejected (A-01)."""
+    assert ps.request_variant(SMUGGLED_WRITE) is None
+    assert not ps.is_read_request(SMUGGLED_WRITE)
+
+
+def test_classifier_rejects_unknown_variant():
+    """REQ-SRV-014: a variant missing from the read table is rejected (Art. 5)."""
+    assert ps.request_variant(UNKNOWN_VARIANT) == 99
+    assert not ps.is_read_request(UNKNOWN_VARIANT)
+
+
+@pytest.mark.parametrize("payload", MALFORMED.values(), ids=list(MALFORMED))
+def test_classifier_rejects_malformed(payload):
+    """REQ-SRV-014: unreadable protobuf has no variant and is not a read."""
+    assert ps.request_variant(payload) is None
+    assert not ps.is_read_request(payload)
+
+
+def test_classifier_explicit_read_variants():
+    """REQ-SRV-013: an explicit ``read_variants`` replaces the version table."""
+    assert ps.is_read_request(frame("update"), read_variants={33})
+    assert not ps.is_read_request(frame("size"), read_variants={33})
+
+
+def test_read_variant_table_and_close_code():
+    """REQ-SRV-013/014: published tables for 5.5.1 and the default close code."""
+    reads = ps.READ_VARIANTS["5.5.1"]
+    # delta-spec §2.2 (perspective.proto at tag v5.5.1)
+    assert reads == {*range(3, 27), 29, 30, 34, 35, 36, 37, 39, 40}
+    assert not reads & set(ps.WRITE_VARIANT_NAMES)
+    assert set(ps.WRITE_VARIANT_NAMES) == {27, 28, 31, 32, 33, 38}
+    assert ps.WRITE_CLOSE_CODE == 4409

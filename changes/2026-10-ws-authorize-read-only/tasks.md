@@ -12,7 +12,7 @@
 
 ## Tareas
 
-### [ ] T-001 · Clasificador estricto y tabla de variantes
+### [x] 2026-10-03 T-001 · Clasificador estricto y tabla de variantes
 - **Qué**: `request_variant()`, `is_read_request()`, `READ_VARIANTS["5.5.1"]`,
   `WRITE_VARIANT_NAMES`, `WRITE_CLOSE_CODE` en `server.py` (DD-007). Sin tocar `serve()` aún.
 - **REQ**: REQ-SRV-013, REQ-SRV-014

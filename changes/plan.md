@@ -11,7 +11,7 @@ Estados: `[ ]` pendiente · `[~]` en curso · `[x]` hecha · `[!]` bloqueada.
 |---|---|---|---|---|---|
 | 0 · Preparación | `[x]` | — | Artefactos SDD versionados; propuestas aprobadas; constitución ratificada; P-01 resuelta; `tests/test_specs.py` (guardas del Art. 7) | — | `pytest tests/test_specs.py` en verde |
 | 1 · Guardia de versiones | `[x]` | V-001, V-002 | Paso de CI que compara los tres pines; Dependabot ignora `perspective-python` | 0 | `PERSPECTIVE_VERSION="5.5.0"` hace fallar Quality |
-| 2 · Clasificador | `[ ]` | T-001 (+ helper A-10) | `request_variant`, `is_read_request`, `READ_VARIANTS`, `WRITE_VARIANT_NAMES`, `WRITE_CLOSE_CODE`; helper de pruebas con `perspective.Client` | 0 | Pruebas del clasificador en verde |
+| 2 · Clasificador | `[x]` | T-001 (+ helper A-10) | `request_variant`, `is_read_request`, `READ_VARIANTS`, `WRITE_VARIANT_NAMES`, `WRITE_CLOSE_CODE`; helper de pruebas con `perspective.Client` | 0 | Pruebas del clasificador en verde |
 | 3 · Contrato y `authorize` | `[ ]` | T-002 ∥ T-003 | Prueba de contrato (REQ-VER-003); `authorize` en `serve()` (DD-005/006) | 2 | Pruebas de `authorize` y `-k contract` en verde |
 | 4 · `read_only` | `[ ]` | T-004 | Clasificación por frame, 4409, guardia de versión, `read_variants` | 2, 3 | Pruebas `test_read_only_*` en verde |
 | 5 · API pública | `[ ]` | T-005 | Parámetros en `asgi_app`/`perspective_api`/`mount`; validaciones; `__all__` | 3, 4 | `test_defaults_unchanged`, ruff limpio |
@@ -37,3 +37,4 @@ sólo se implementa tras aprobarla.
 |---|---|---|---|
 | 2026-10-03 | 0 | hecha | `tests/test_specs.py` rojo → verde tras la aprobación del mantenedor; P-01 queda con la respuesta propuesta ("ambas"), aprobada con la propuesta |
 | 2026-10-03 | 1 | hecha | `scripts/check_perspective_versions.py` + paso en `build`; `ignore` en Dependabot; 4 pruebas rojo → verde; `5.5.0` local → exit 1. Pendiente tras el push: confirmar en *Insights → Dependabot* que el YAML valida. También se formateó el ejemplo de `delta-spec.md` (ruff formatea Markdown y habría roto Lint) |
+| 2026-10-03 | 2 | hecha | `request_variant`, `is_read_request`, `READ_VARIANTS["5.5.1"]` (32 lecturas), `WRITE_VARIANT_NAMES`, `WRITE_CLOSE_CODE`; helper `Recorder` (A-10); 71 pruebas rojo → verde. Variantes del cliente oficial medidas = §2.2 |
