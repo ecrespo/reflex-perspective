@@ -17,8 +17,8 @@ Estados: `[ ]` pendiente · `[~]` en curso · `[x]` hecha · `[!]` bloqueada.
 | 5 · API pública | `[x]` | T-005 | Parámetros en `asgi_app`/`perspective_api`/`mount`; validaciones; `__all__` | 3, 4 | `test_defaults_unchanged`, ruff limpio |
 | 6 · Validación y docs | `[x]` | T-006 ∥ T-007 | Pase en navegador con la demo en sólo lectura; README; `CHANGELOG.md` | 5 | Sin 4409 en lectura; variantes anotadas |
 | 7 · Plegado SDD | `[x]` | T-008, V-003 | Deltas en `specs/`; `0.2.0`; carpetas a `_archivo/` | 1, 6 | Quality y Security en verde; REQ en `specs/` |
-| 8 · Release 0.2.0 | `[ ]` | T-009 | PR a `main`, tag `v0.2.0` (el tag lo empuja el mantenedor) | 7 | 0.2.0 en PyPI y release en GitHub |
-| 9 · Diferidos | `[ ]` | ver abajo | Cambios posteriores a 0.2.0, cada uno con su propuesta | 8 | Cada sub-fase publicada y plegada |
+| 8 · Release 0.2.0 | `[x]` | T-009 | PR a `main`, tag `v0.2.0` (el tag lo empuja el mantenedor) | 7 | 0.2.0 en PyPI y release en GitHub |
+| 9 · Diferidos | `[~]` | ver abajo | Cambios posteriores a 0.2.0, cada uno con su propuesta | 8 | Cada sub-fase publicada y plegada |
 
 ## Fase 9 — Diferidos
 
@@ -27,8 +27,8 @@ sólo se implementa tras aprobarla.
 
 | Sub-fase | Origen | Alcance | Versión objetivo | Bloqueo |
 |---|---|---|---|---|
-| 9a · Cierres 44xx en el puente | P-02, A-08, A-09 | Envolver el WebSocket del cliente en `perspective_viewer.jsx` para leer `CloseEvent.code`; no reintentar 4400–4499; pasar el código a `on_disconnect`; aviso en la consola del navegador ante 4409 | 0.3.0 | — |
-| 9b · Tope de sesiones y rechazos | P-03, A-11 | Tope de sesiones por hub (4429) y gancho `on_reject(code)` para métricas, con valores por omisión que no cambian 0.2.0 | 0.3.0 | Confirmar con la consola de CuidaSalud que lo necesita en la librería |
+| 9a · Cierres 44xx en el puente ([`2026-10-bridge-close-codes/`](_archivo/2026-10-bridge-close-codes/), publicado en 0.3.0) | P-02, A-08, A-09 | Envolver el WebSocket del cliente en `perspective_viewer.jsx` para leer `CloseEvent.code`; no reintentar 4400–4499; pasar el código a `on_disconnect`; aviso en la consola del navegador ante 4409 | 0.3.0 | — |
+| 9b · Tope de sesiones y rechazos ([`2026-10-session-cap-on-reject/`](_archivo/2026-10-session-cap-on-reject/), publicado en 0.3.0) | P-03, A-11 | Tope de sesiones por hub (4429) y gancho `on_reject(code)` para métricas, con valores por omisión que no cambian 0.2.0 | 0.3.0 | — (el mantenedor aceptó la propuesta el 2026-10-03) |
 | 9c · Subida de Perspective | Diferido de `changes/README.md` | Seguir `specs/runbooks/perspective-upgrade.md`: tabla `READ_VARIANTS[<nueva>]` con 41 `table_describe_req` y 9 `reserved` | patch | Esperar a que npm y PyPI publiquen la versión con el campo 41 |
 
 ## Registro
@@ -43,3 +43,7 @@ sólo se implementa tras aprobarla.
 | 2026-10-03 | 5 | hecha | Parámetros en `perspective_api`/`mount`; `ValueError` (`write_close_code`) y `RuntimeError` (versión) al construir; clasificador en `__all__`; 22 pruebas rojo → verde. Suite 160 en 3.13 y 16 + 2 omitidos en 3.10; wheel y `reflex compile` de la demo OK |
 | 2026-10-03 | 6 | hecha | Demo: tarjeta *Access* en `/server` (switch de `authorize` → 4403, contadores, botón de escritura) y `PERSPECTIVE_DEMO_READ_ONLY=1`; README (*Access control*) y `CHANGELOG.md`; 10 pruebas rojo → verde. Pase en Chrome headless: sin variantes fuera de la tabla; escritura del navegador → 4409 en sólo lectura y aplicada en modo escribible |
 | 2026-10-03 | 7 | hecha | Deltas plegados en PRD/API/diseño técnico 1.1; enmienda Art. 3 (aprobada por el mantenedor); `0.2.0` + `uv.lock`; cambios en `_archivo/`; 15 pruebas rojo → verde (tabla §2.2 = código) |
+| 2026-10-03 | 8 | hecha | PR #3 → `develop`, PR #4 → `main` (CI verde; GitHub validó `dependabot.yml`); tag `v0.2.0`; Release run 37125692814 publicó en PyPI y creó la release; instalación limpia de `[server]==0.2.0` verificada |
+
+| 2026-10-03 | 9a | hecha | Puente: sin reintentos ante 4400–4499 salvo 4429, aviso en consola, `on_disconnect(url, code)`; pruebas JS con node:test; pase en navegador (4409, 4403, reinicio) |
+| 2026-10-03 | 9b | hecha | `max_sessions` (4429), `on_reject`, `session_count`; demo y pase en navegador. 9c sigue bloqueada (npm y PyPI en 5.5.1) |

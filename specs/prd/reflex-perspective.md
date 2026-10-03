@@ -1,8 +1,9 @@
 # PRD — reflex-perspective
 
-> Versión de la spec: 1.1 (librería `0.2.0`) · Fecha: 2026-10-03
+> Versión de la spec: 1.2 (librería `0.3.0`) · Fecha: 2026-10-03
 > Autor: Ernesto Crespo (mantenedor) · Estado: vigente (1.0 reconstruida del código; 1.1 pliega
-> `2026-10-ws-authorize-read-only` y `2026-10-perspective-version-guard`)
+> `2026-10-ws-authorize-read-only` y `2026-10-perspective-version-guard`; 1.2 pliega
+> `2026-10-bridge-close-codes` y `2026-10-session-cap-on-reject`)
 
 ## 1. Problema
 
@@ -44,7 +45,7 @@ Notación EARS. MUST salvo que se indique.
 - **REQ-VIEW-005**: EL SISTEMA DEBERÁ exponer los Custom Events de Perspective como eventos
   Reflex (`on_load`, `on_click`, `on_select`, `on_config_update`, `on_global_filter_update`,
   `on_layout_update`, `on_active_panel_update`, `on_toggle_settings`, `on_disconnect`,
-  `on_error`).
+  `on_error`); `on_disconnect` recibe `(url, code)` (REQ-VIEW-012).
 - **REQ-VIEW-006**: SI el visor emite una config y la app la devuelve por `config`
   (lazo controlado), ENTONCES EL SISTEMA NO DEBERÁ re-aplicarla.
 - **REQ-VIEW-007**: EL SISTEMA DEBERÁ exponer acciones imperativas como `EventSpec`
@@ -54,7 +55,14 @@ Notación EARS. MUST salvo que se indique.
 - **REQ-VIEW-009**: EL SISTEMA DEBERÁ cargar WASM de forma perezosa y segura con SSR.
 - **REQ-VIEW-010**: SI se pierde la conexión del WebSocket en modo servidor, ENTONCES EL
   SISTEMA DEBERÁ emitir `on_disconnect` y reintentar con espera exponencial (500 ms × 2ⁿ,
-  tope 10 s).
+  tope 10 s), salvo lo dispuesto en REQ-VIEW-011.
+- **REQ-VIEW-011** (no deseado): SI el WebSocket de un visor en modo servidor se cierra con un
+  código entre 4400 y 4499 distinto de 4429, ENTONCES EL SISTEMA NO DEBERÁ reintentar la
+  conexión a esa URL hasta que se recargue la página y DEBERÁ escribir en la consola del
+  navegador un aviso con el código y su causa probable.
+- **REQ-VIEW-012** (evento): CUANDO se pierda la conexión de un visor en modo servidor, EL
+  SISTEMA DEBERÁ emitir `on_disconnect` con la URL y el código de cierre (`None` si no se
+  conoce); un handler de un solo argumento DEBERÁ seguir recibiendo la URL.
 
 ### 4.2 Modo servidor (REQ-SRV)
 
@@ -98,10 +106,23 @@ Notación EARS. MUST salvo que se indique.
 - **REQ-SRV-016** (ubicuo): EL SISTEMA DEBERÁ seguir aceptando escrituras hechas desde Python
   (`PerspectiveHub.update/remove/clear/table/delete_table`, cliente local) con `read_only=True`.
 - **REQ-SRV-017** (ubicuo): EL SISTEMA DEBERÁ aceptar `authorize`, `read_only`,
-  `write_close_code` y `read_variants` en `serve()`, `asgi_app()`, `perspective_api()` y
-  `mount()`, con valores por omisión que reproducen el comportamiento de 0.1.0.
+  `write_close_code`, `read_variants`, `max_sessions` y `on_reject` en `serve()`, `asgi_app()`,
+  `perspective_api()` y `mount()`, con valores por omisión que reproducen el comportamiento de
+  0.1.0.
 - **REQ-SRV-018** (no deseado): SI `write_close_code` está fuera de 4000–4999, ENTONCES EL
   SISTEMA DEBERÁ lanzar `ValueError` al construir la app.
+- **REQ-SRV-019** (no deseado): SI `max_sessions` está configurado y el hub ya tiene ese número de
+  sesiones WebSocket abiertas, ENTONCES EL SISTEMA DEBERÁ aceptar el handshake, cerrar con 4429
+  y no crear la sesión; el control DEBERÁ evaluarse después de `Origin` y `authorize`.
+- **REQ-SRV-020** (evento): CUANDO el sistema rechace una conexión o cierre por un frame no
+  permitido, EL SISTEMA DEBERÁ llamar `on_reject(code, websocket)` si está configurado (síncrono
+  o asíncrono), con el código del cierre.
+- **REQ-SRV-021** (no deseado): SI `on_reject` lanza una excepción, ENTONCES EL SISTEMA DEBERÁ
+  registrarla con `logger.exception` y cerrar igualmente con el código previsto.
+- **REQ-SRV-022** (ubicuo): EL SISTEMA DEBERÁ exponer `PerspectiveHub.session_count` con el número
+  de sesiones WebSocket abiertas, que DEBERÁ volver a su valor al cerrarse cada sesión.
+- **REQ-SRV-023** (no deseado): SI `max_sessions` no es un entero ≥ 1, ENTONCES EL SISTEMA DEBERÁ
+  lanzar `ValueError` al construir la app (o al llamar `serve()`).
 
 ### 4.3 Versiones (REQ-VER)
 
@@ -123,14 +144,16 @@ Notación EARS. MUST salvo que se indique.
 - Un pivote sobre una tabla grande no bloquea el lazo de eventos de Reflex (Art. 6).
 - Compatibilidad hacia atrás en cada versión `0.x` salvo sección Breaking (Art. 4).
 
-## 6. Limitaciones conocidas (0.2.0)
+## 6. Limitaciones conocidas (0.3.0)
 
 - **Por omisión el WebSocket no autentica y es escribible** (compatibilidad con 0.1.0, Art. 4);
   `authorize` y `read_only=True` lo cierran (REQ-SRV-010…018). `read_only` no impide exportar
   lo que el usuario puede ver (las lecturas `view_to_*` siguen permitidas).
 - Cada worker del backend tiene su propio hub.
-- El puente no distingue el código de cierre del WebSocket: todo cierre se reintenta, también
-  4401/4403/4409 (fase 9a del plan).
+- El puente lee el código de cierre del texto que el transporte de Perspective 5.5.1 pasa a
+  `on_error`; si una versión nueva cambia ese texto, el código llega como `None` y el visor
+  reintenta todo cierre (runbook de subida).
+- El tope de sesiones es por hub y por proceso (ver "un hub por proceso").
 
 ## Constitution check
 

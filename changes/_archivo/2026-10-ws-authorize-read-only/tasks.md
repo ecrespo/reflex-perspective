@@ -93,7 +93,7 @@
 - **Done**: CI **Quality** y **Security** en verde en `develop`; `grep -rn "REQ-SRV-01[0-8]"
   specs/` encuentra cada REQ en el PRD.
 
-### [ ] T-009 · Publicar 0.2.0
+### [x] 2026-10-03 T-009 · Publicar 0.2.0
 - **Qué**: merge a `main`, `git tag v0.2.0 && git push origin v0.2.0`.
 - **REQ**: — (cierra PR-11 de la consola)
 - **Depende de**: T-008
@@ -127,4 +127,5 @@ SHOULD diferidos: P-02 (reintentos del puente ante 44xx), P-03 (tope de sesiones
 | 2026-10-03 | T-005 | hecha | Validaciones al construir; clasificador en `__all__` |
 | 2026-10-03 | T-006 | hecha | Chrome headless (Playwright) sobre la demo con `PERSPECTIVE_DEMO_READ_ONLY=1`, `/server`: cambio de plugin, `group_by`, filtro, orden, expand/collapse/`set_depth`, panel de ajustes, `to_csv`, `trades` → modo `server`, cierre de pestaña. Variantes enviadas por el navegador: 3, 4, 5, 6, 7, 9, 11, 12, 13, 14, 15, 16, 18, 19, 21, 22, 23, 24, 25 — **todas en la tabla**, 0 cierres 4409. Botón "Write from the browser" (`rp.update`, variante 33): 4409 + `warning` en sólo lectura; aplicado sin cierre en modo escribible. En lugar de `/api` (visor sólo cliente) se usó la tarjeta *Access* de `/server` |
 | 2026-10-03 | T-007 | hecha | README *Access control*, `CHANGELOG.md` (0.2.0 sin fecha hasta el release) |
-| 2026-10-03 | T-008 | hecha | Delta plegado en PRD/API/diseño técnico; `0.2.0`; carpeta en `_archivo/`. CI en GitHub: pendiente del push |
+| 2026-10-03 | T-008 | hecha | Delta plegado en PRD/API/diseño técnico; `0.2.0`; carpeta en `_archivo/`. CI en GitHub verde (PR #3 y #4) |
+| 2026-10-03 | T-009 | hecha | `v0.2.0` en PyPI (wheel + sdist) y release de GitHub con artefactos |

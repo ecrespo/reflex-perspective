@@ -32,39 +32,51 @@ def test_read_only_from_env(value, expected):
     options = access.ws_options({access.READ_ONLY_ENV: value})
     assert options["read_only"] is expected
     assert options["authorize"] is access.authorize
+    assert options["on_reject"] is access.on_reject
 
 
-def test_read_only_off_by_default():
-    """REQ-SRV-017 (demo): without the variable the demo stays writable."""
-    assert access.ws_options({})["read_only"] is False
+@pytest.mark.parametrize(
+    ("value", "expected"), [("3", 3), ("1", 1), ("", None), ("0", None), ("x", None)]
+)
+def test_max_sessions_from_env(value, expected):
+    """REQ-SRV-019 (demo): PERSPECTIVE_DEMO_MAX_SESSIONS caps the hub."""
+    assert (
+        access.ws_options({access.MAX_SESSIONS_ENV: value})["max_sessions"] == expected
+    )
 
 
-def test_authorize_counts_and_refuses_when_closed():
-    """REQ-SRV-011 (demo): closing the door refuses new viewers with 4403."""
-    hub = ps.PerspectiveHub()
-    app = hub.asgi_app("/perspective", **access.ws_options({}))
-    with TestClient(app) as client:
-        with client.websocket_connect("/perspective"):
-            pass
-        access.Access.accepting = False
-        with (
-            client.websocket_connect("/perspective") as ws,
-            pytest.raises(WebSocketDisconnect) as exc,
-        ):
-            ws.receive_bytes()
-    assert exc.value.code == 4403
-    assert (access.Access.accepted, access.Access.refused) == (1, 1)
+def test_defaults_off():
+    """REQ-SRV-017 (demo): without variables the demo is writable and uncapped."""
+    options = access.ws_options({})
+    assert options["read_only"] is False
+    assert options["max_sessions"] is None
 
 
-def test_refused_writes_are_counted_from_the_library_log():
-    """REQ-SRV-014 (demo): each read-only refusal bumps the counter."""
-    hub = ps.PerspectiveHub()
-    app = hub.asgi_app("/perspective", **access.ws_options({access.READ_ONLY_ENV: "1"}))
+def connect_and_close_code(app, frame=None):
     with (
         TestClient(app) as client,
         client.websocket_connect("/perspective") as ws,
-        pytest.raises(WebSocketDisconnect),
+        pytest.raises(WebSocketDisconnect) as exc,
     ):
-        ws.send_bytes(b"\x08\x80")  # malformed frame (Art. 2 allows hand-written)
+        if frame is not None:
+            ws.send_bytes(frame)
         ws.receive_bytes()
-    assert access.Access.writes_refused == 1
+    return exc.value.code
+
+
+def test_closed_door_refuses_and_is_counted():
+    """REQ-SRV-011/020 (demo): closing the door refuses with 4403, counted."""
+    hub = ps.PerspectiveHub()
+    app = hub.asgi_app("/perspective", **access.ws_options({}))
+    access.Access.accepting = False
+    assert connect_and_close_code(app) == 4403
+    assert access.Access.rejections == {4403: 1}
+
+
+def test_refused_writes_are_counted():
+    """REQ-SRV-014/020 (demo): each read-only refusal is counted by on_reject."""
+    hub = ps.PerspectiveHub()
+    app = hub.asgi_app("/perspective", **access.ws_options({access.READ_ONLY_ENV: "1"}))
+    assert connect_and_close_code(app, b"\x08\x80") == 4409  # malformed (Art. 2)
+    assert access.Access.rejections == {4409: 1}
+    assert access.rejection_summary() == "4409×1"

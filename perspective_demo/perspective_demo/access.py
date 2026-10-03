@@ -5,21 +5,22 @@
 * ``read_only``: set ``PERSPECTIVE_DEMO_READ_ONLY=1`` to refuse every write
   coming from a browser (closed with 4409); the market feed keeps writing from
   Python.
-
-Counters come from the hook and from the library's logger, which is how an
-app can get rejection metrics without extra hooks.
+* ``max_sessions``: set ``PERSPECTIVE_DEMO_MAX_SESSIONS=N`` to cap the hub;
+  extra tabs are refused with 4429 and keep retrying until a slot frees up.
+* ``on_reject`` counts every refusal by close code for the /server page.
 """
 
 from __future__ import annotations
 
-import logging
 import os
+from collections import Counter
 from collections.abc import Mapping
 from typing import Any
 
 from starlette.websockets import WebSocket
 
 READ_ONLY_ENV = "PERSPECTIVE_DEMO_READ_ONLY"
+MAX_SESSIONS_ENV = "PERSPECTIVE_DEMO_MAX_SESSIONS"
 REFUSED_CODE = 4403
 
 
@@ -27,46 +28,46 @@ class Access:
     """Process-wide switch and counters the UI reads and flips."""
 
     accepting: bool = True
-    accepted: int = 0
-    refused: int = 0
-    writes_refused: int = 0
+    rejections: Counter[int] = Counter()
 
     @classmethod
     def reset(cls) -> None:
         cls.accepting = True
-        cls.accepted = cls.refused = cls.writes_refused = 0
+        cls.rejections = Counter()
 
 
 def authorize(websocket: WebSocket) -> int | None:
     """Accept new viewers unless the door is closed."""
-    if Access.accepting:
-        Access.accepted += 1
-        return None
-    Access.refused += 1
-    return REFUSED_CODE
+    return None if Access.accepting else REFUSED_CODE
 
 
-class _CountRefusedWrites(logging.Filter):
-    """Counts read-only refusals and lets the record through to the console."""
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        if record.levelno == logging.WARNING and "read-only" in record.getMessage():
-            Access.writes_refused += 1
-        return True
+def on_reject(code: int, websocket: WebSocket) -> None:
+    """Count refusals by close code (metrics hook)."""
+    Access.rejections[code] += 1
 
 
-_SERVER_LOGGER = logging.getLogger("reflex_perspective.server")
-if not any(isinstance(f, _CountRefusedWrites) for f in _SERVER_LOGGER.filters):
-    _SERVER_LOGGER.addFilter(_CountRefusedWrites())
+def rejection_summary() -> str:
+    return ", ".join(f"{code}×{n}" for code, n in sorted(Access.rejections.items()))
 
 
 def read_only_from_env(environ: Mapping[str, str]) -> bool:
     return environ.get(READ_ONLY_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def max_sessions_from_env(environ: Mapping[str, str]) -> int | None:
+    value = environ.get(MAX_SESSIONS_ENV, "").strip()
+    return int(value) if value.isdigit() and int(value) >= 1 else None
+
+
 def ws_options(environ: Mapping[str, str] = os.environ) -> dict[str, Any]:
     """Keyword options for ``ps.perspective_api`` / ``ps.mount``."""
-    return {"authorize": authorize, "read_only": read_only_from_env(environ)}
+    return {
+        "authorize": authorize,
+        "on_reject": on_reject,
+        "read_only": read_only_from_env(environ),
+        "max_sessions": max_sessions_from_env(environ),
+    }
 
 
 READ_ONLY = read_only_from_env(os.environ)
+MAX_SESSIONS = max_sessions_from_env(os.environ)

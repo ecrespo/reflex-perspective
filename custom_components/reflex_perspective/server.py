@@ -76,6 +76,12 @@ Authorize = Callable[[WebSocket], Awaitable[int | None] | int | None]
 Returns ``None`` to accept, or a close code (4000-4999, or 1008) to refuse.
 """
 
+OnReject = Callable[[int, WebSocket], Awaitable[None] | None]
+"""Hook called with the close code of every refusal (for metrics)."""
+
+# Close code for "too many sessions, try again later" (max_sessions).
+_WS_TOO_MANY_SESSIONS = 4429
+
 WRITE_CLOSE_CODE = 4409
 """Default close code for a frame refused in read-only mode."""
 
@@ -245,6 +251,28 @@ def _valid_refusal_code(code: object) -> bool:
     return type(code) is int and (4000 <= code <= 4999 or code == _WS_POLICY_VIOLATION)
 
 
+def _check_max_sessions(max_sessions: int | None) -> None:
+    if max_sessions is not None and not (
+        type(max_sessions) is int and max_sessions >= 1
+    ):
+        msg = f"max_sessions must be an int >= 1 or None, got {max_sessions!r}"
+        raise ValueError(msg)
+
+
+async def _notify_reject(
+    on_reject: OnReject | None, code: int, websocket: WebSocket
+) -> None:
+    """Report a refusal; a failing hook is logged and never changes the close."""
+    if on_reject is None:
+        return
+    try:
+        result = on_reject(code, websocket)
+        if inspect.isawaitable(result):
+            await result
+    except Exception:
+        logger.exception("Perspective on_reject hook failed")
+
+
 async def _run_authorize(authorize: Authorize, websocket: WebSocket) -> int | None:
     """``None`` to accept, else the close code to use (1011 if the hook fails)."""
     try:
@@ -306,6 +334,7 @@ class PerspectiveHub:
         self.client = self.server.new_local_client()
         self._lock = threading.RLock()
         self._tables: dict[str, Any] = {}
+        self._sessions = 0
 
     # ------------------------------------------------------------------ tables
     def table(
@@ -422,6 +451,23 @@ class PerspectiveHub:
             view.delete()
 
     # --------------------------------------------------------------- websocket
+    @property
+    def session_count(self) -> int:
+        """WebSocket sessions currently open on this hub."""
+        with self._lock:
+            return self._sessions
+
+    def _admit(self, max_sessions: int | None) -> bool:
+        with self._lock:
+            if max_sessions is not None and self._sessions >= max_sessions:
+                return False
+            self._sessions += 1
+            return True
+
+    def _release(self) -> None:
+        with self._lock:
+            self._sessions -= 1
+
     async def serve(
         self,
         websocket: WebSocket,
@@ -432,6 +478,8 @@ class PerspectiveHub:
         read_only: bool = False,
         write_close_code: int = WRITE_CLOSE_CODE,
         read_variants: Collection[int] | None = None,
+        max_sessions: int | None = None,
+        on_reject: OnReject | None = None,
     ) -> None:
         """Run a Perspective session over a Starlette WebSocket.
 
@@ -462,8 +510,16 @@ class PerspectiveHub:
                 ``None`` uses :data:`READ_VARIANTS` for the installed
                 ``perspective-python`` and raises ``RuntimeError`` if that
                 version has no verified table.
+            max_sessions: Cap on the sessions open on this hub (all its
+                routes). Once reached, new sockets are accepted and closed
+                with 4429 ("try again later") after ``authorize``.
+            on_reject: Called as ``on_reject(code, websocket)`` (sync or
+                async) before every refusal: 1008, ``authorize``'s code, 1011,
+                ``write_close_code`` and 4429. Its errors are logged and never
+                change the close.
         """
         allowed_reads = _read_only_reads(read_only, write_close_code, read_variants)
+        _check_max_sessions(max_sessions)
 
         allowed = (
             _default_allowed_origins() if allowed_origins is None else allowed_origins
@@ -471,16 +527,41 @@ class PerspectiveHub:
         origin = websocket.headers.get("origin")
         if not origin_allowed(origin, allowed):
             logger.warning("Rejected Perspective websocket from origin %r", origin)
+            await _notify_reject(on_reject, _WS_POLICY_VIOLATION, websocket)
             await websocket.close(code=_WS_POLICY_VIOLATION)
             return
 
+        refusal = None
         if authorize is not None:
             refusal = await _run_authorize(authorize, websocket)
-            if refusal is not None:
-                await websocket.accept()
-                await websocket.close(code=refusal)
-                return
+        if refusal is None and not self._admit(max_sessions):
+            logger.warning(
+                "Refused Perspective websocket: %s sessions open (max_sessions)",
+                max_sessions,
+            )
+            refusal = _WS_TOO_MANY_SESSIONS
+        if refusal is not None:
+            await _notify_reject(on_reject, refusal, websocket)
+            await websocket.accept()
+            await websocket.close(code=refusal)
+            return
 
+        try:
+            await self._run_session(
+                websocket, executor, allowed_reads, write_close_code, on_reject
+            )
+        finally:
+            self._release()
+
+    async def _run_session(
+        self,
+        websocket: WebSocket,
+        executor: Executor | None,
+        allowed_reads: frozenset[int] | None,
+        write_close_code: int,
+        on_reject: OnReject | None,
+    ) -> None:
+        """Accept the socket and relay frames to a new Perspective session."""
         loop = asyncio.get_running_loop()
         outbox: asyncio.Queue[bytes | None] = asyncio.Queue()
 
@@ -526,6 +607,7 @@ class PerspectiveHub:
                         if variant is not None
                         else "unreadable",
                     )
+                    await _notify_reject(on_reject, write_close_code, websocket)
                     await websocket.close(code=write_close_code)
                     break
                 # Requests are awaited one at a time, so ordering is preserved.
@@ -549,6 +631,8 @@ class PerspectiveHub:
         read_only: bool = False,
         write_close_code: int = WRITE_CLOSE_CODE,
         read_variants: Collection[int] | None = None,
+        max_sessions: int | None = None,
+        on_reject: OnReject | None = None,
     ) -> Starlette:
         """A Starlette app exposing this hub's WebSocket at ``path``.
 
@@ -557,11 +641,13 @@ class PerspectiveHub:
         options.
 
         Raises:
-            ValueError: ``write_close_code`` outside 4000-4999.
+            ValueError: ``write_close_code`` outside 4000-4999, or
+                ``max_sessions`` not an int >= 1.
             RuntimeError: ``read_only=True`` without ``read_variants`` on a
                 ``perspective-python`` version with no verified read table.
         """
         _read_only_reads(read_only, write_close_code, read_variants)
+        _check_max_sessions(max_sessions)
 
         async def endpoint(websocket: WebSocket) -> None:
             await self.serve(
@@ -572,6 +658,8 @@ class PerspectiveHub:
                 read_only=read_only,
                 write_close_code=write_close_code,
                 read_variants=read_variants,
+                max_sessions=max_sessions,
+                on_reject=on_reject,
             )
 
         return Starlette(routes=[WebSocketRoute(path, endpoint)])
@@ -600,6 +688,8 @@ def perspective_api(
     read_only: bool = False,
     write_close_code: int = WRITE_CLOSE_CODE,
     read_variants: Collection[int] | None = None,
+    max_sessions: int | None = None,
+    on_reject: OnReject | None = None,
 ) -> Starlette:
     """Build the ``api_transformer`` that serves Perspective at ``path``.
 
@@ -617,6 +707,8 @@ def perspective_api(
         read_only=read_only,
         write_close_code=write_close_code,
         read_variants=read_variants,
+        max_sessions=max_sessions,
+        on_reject=on_reject,
     )
 
 
@@ -631,6 +723,8 @@ def mount(
     read_only: bool = False,
     write_close_code: int = WRITE_CLOSE_CODE,
     read_variants: Collection[int] | None = None,
+    max_sessions: int | None = None,
+    on_reject: OnReject | None = None,
 ) -> PerspectiveHub:
     """Add the Perspective WebSocket to an existing ``rx.App``.
 
@@ -649,6 +743,8 @@ def mount(
         read_only=read_only,
         write_close_code=write_close_code,
         read_variants=read_variants,
+        max_sessions=max_sessions,
+        on_reject=on_reject,
     )
     current = app.api_transformer
     if current is None:
