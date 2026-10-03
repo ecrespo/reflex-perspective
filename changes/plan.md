@@ -27,8 +27,8 @@ sólo se implementa tras aprobarla.
 
 | Sub-fase | Origen | Alcance | Versión objetivo | Bloqueo |
 |---|---|---|---|---|
-| 9a · Cierres 44xx en el puente ([`2026-10-bridge-close-codes/`](2026-10-bridge-close-codes/)) | P-02, A-08, A-09 | Envolver el WebSocket del cliente en `perspective_viewer.jsx` para leer `CloseEvent.code`; no reintentar 4400–4499; pasar el código a `on_disconnect`; aviso en la consola del navegador ante 4409 | 0.3.0 | — |
-| 9b · Tope de sesiones y rechazos ([`2026-10-session-cap-on-reject/`](2026-10-session-cap-on-reject/)) | P-03, A-11 | Tope de sesiones por hub (4429) y gancho `on_reject(code)` para métricas, con valores por omisión que no cambian 0.2.0 | 0.3.0 | — (el mantenedor aceptó la propuesta el 2026-10-03) |
+| 9a · Cierres 44xx en el puente ([`2026-10-bridge-close-codes/`](_archivo/2026-10-bridge-close-codes/), publicado en 0.3.0) | P-02, A-08, A-09 | Envolver el WebSocket del cliente en `perspective_viewer.jsx` para leer `CloseEvent.code`; no reintentar 4400–4499; pasar el código a `on_disconnect`; aviso en la consola del navegador ante 4409 | 0.3.0 | — |
+| 9b · Tope de sesiones y rechazos ([`2026-10-session-cap-on-reject/`](_archivo/2026-10-session-cap-on-reject/), publicado en 0.3.0) | P-03, A-11 | Tope de sesiones por hub (4429) y gancho `on_reject(code)` para métricas, con valores por omisión que no cambian 0.2.0 | 0.3.0 | — (el mantenedor aceptó la propuesta el 2026-10-03) |
 | 9c · Subida de Perspective | Diferido de `changes/README.md` | Seguir `specs/runbooks/perspective-upgrade.md`: tabla `READ_VARIANTS[<nueva>]` con 41 `table_describe_req` y 9 `reserved` | patch | Esperar a que npm y PyPI publiquen la versión con el campo 41 |
 
 ## Registro

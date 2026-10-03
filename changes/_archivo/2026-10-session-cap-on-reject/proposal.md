@@ -1,7 +1,7 @@
 # Propuesta — Tope de sesiones y gancho de rechazos
 
-> Estado: **aprobada** (Ernesto Crespo, 2026-10-03) · Fecha: 2026-10-03 · Autor: Ernesto Crespo (mantenedor)
-> Origen: P-03 y A-11 de [`_archivo/2026-10-ws-authorize-read-only/`](../_archivo/2026-10-ws-authorize-read-only/)
+> Estado: **implementada** (0.3.0, 2026-10-03; aprobada por Ernesto Crespo el 2026-10-03) · Fecha: 2026-10-03 · Autor: Ernesto Crespo (mantenedor)
+> Origen: P-03 y A-11 de [`_archivo/2026-10-ws-authorize-read-only/`](../2026-10-ws-authorize-read-only/)
 > Specs base afectadas: `specs/prd/reflex-perspective.md` §4.2, `specs/api/server-api-v1.md` §1–2,
 > `specs/technical/server-architecture.md` §3–4
 > Versión objetivo: **0.3.0**

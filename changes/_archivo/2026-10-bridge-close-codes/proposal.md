@@ -1,7 +1,7 @@
 # Propuesta — Códigos de cierre en el puente del visor
 
-> Estado: **aprobada** (Ernesto Crespo, 2026-10-03) · Fecha: 2026-10-03 · Autor: Ernesto Crespo (mantenedor)
-> Origen: P-02 y hallazgos A-08 / A-09 de [`_archivo/2026-10-ws-authorize-read-only/`](../_archivo/2026-10-ws-authorize-read-only/)
+> Estado: **implementada** (0.3.0, 2026-10-03; aprobada por Ernesto Crespo el 2026-10-03) · Fecha: 2026-10-03 · Autor: Ernesto Crespo (mantenedor)
+> Origen: P-02 y hallazgos A-08 / A-09 de [`_archivo/2026-10-ws-authorize-read-only/`](../2026-10-ws-authorize-read-only/)
 > Specs base afectadas: `specs/prd/reflex-perspective.md` §4.1 (REQ-VIEW-005, REQ-VIEW-010) y §6,
 > `specs/runbooks/perspective-upgrade.md`
 > Versión objetivo: **0.3.0**
