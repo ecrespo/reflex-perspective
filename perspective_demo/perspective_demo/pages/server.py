@@ -25,6 +25,13 @@ class ServerState(rx.State):
     accepted: int = 0
     refused: int = 0
     writes_refused: int = 0
+    last_disconnect: str = ""
+
+    @rx.event
+    def disconnected(self, url: str, code: int | None):
+        """on_disconnect(url, code): show why the socket dropped."""
+        self.last_disconnect = f"{code if code is not None else 'unknown'} · {url}"
+        self.refresh()
 
     @rx.event
     def refresh(self):
@@ -146,6 +153,16 @@ def _access_card() -> rx.Component:
                 size="2",
                 color=rx.color("gray", 11),
             ),
+            rx.cond(
+                S.last_disconnect != "",
+                rx.badge(
+                    rx.icon("unplug", size=12),
+                    "last disconnect: ",
+                    S.last_disconnect,
+                    color_scheme="red",
+                    variant="soft",
+                ),
+            ),
             gap="16px",
             wrap="wrap",
             align="center",
@@ -154,8 +171,9 @@ def _access_card() -> rx.Component:
             rx.cond(
                 S.read_only,
                 "The socket only forwards known read requests: the button above closes the "
-                "quotes viewer's connection with 4409 and it reconnects. The market feed keeps "
-                "writing from Python.",
+                "connection with 4409; the viewers stop reconnecting and the browser console "
+                "explains why (reload the page to reconnect). The market feed keeps writing "
+                "from Python.",
                 "Writable socket: the button adds a BROWSER row to quotes. Start the demo with "
                 "PERSPECTIVE_DEMO_READ_ONLY=1 to refuse browser writes.",
             ),
@@ -260,6 +278,7 @@ def server_page() -> rx.Component:
                 rp.perspective_viewer(
                     id="quotes",
                     server_url="/perspective",
+                    on_disconnect=ServerState.disconnected,
                     server_table="quotes",
                     plugin="Datagrid",
                     columns=[
@@ -298,6 +317,7 @@ def server_page() -> rx.Component:
                 rp.perspective_viewer(
                     id="trades",
                     server_url="/perspective",
+                    on_disconnect=ServerState.disconnected,
                     server_table="trades",
                     server_mode=S.trades_mode,
                     plugin="Y Bar",
@@ -328,6 +348,7 @@ def server_page() -> rx.Component:
             rp.perspective_viewer(
                 id="orders",
                 server_url="/perspective",
+                on_disconnect=ServerState.disconnected,
                 server_table="orders",
                 plugin="Datagrid",
                 group_by=["Region", "Category"],

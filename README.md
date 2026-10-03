@@ -151,8 +151,8 @@ ps.mount(
   verified read table, building the app raises `RuntimeError` unless you pass
   `read_variants=`.
 - With `read_only=True`, a server viewer with `edit_mode="EDIT"`, `update_rows`,
-  `remove_keys` or `rp.update/remove/replace/clear` gets its socket closed with 4409 (and
-  the viewer reconnects). Write through the hub instead. Read-only does not stop users from
+  `remove_keys` or `rp.update/remove/replace/clear` gets its socket closed with 4409; the
+  viewers stop reconnecting and the browser console says why. Write through the hub instead. Read-only does not stop users from
   exporting what they can see (`view_to_*` reads stay allowed).
 - `ps.request_variant()` and `ps.is_read_request()` are public, for apps that compose
   their own handler around `hub.serve()`.
@@ -249,10 +249,17 @@ Styling props (`height`, `width`, `border_radius`, ...) apply to the `<perspecti
 | `on_global_filter_update` | List of filters (workspaces) |
 | `on_layout_update` / `on_active_panel_update` | Panel ids / active panel id |
 | `on_toggle_settings` | `bool` |
-| `on_disconnect` / `on_error` | URL / message |
+| `on_disconnect` | `(url, code)`: the server URL and the WebSocket close code (`None` if unknown); one-argument handlers get the URL |
+| `on_error` | Message |
 
 A controlled loop (`config=State.cfg`, `on_config_update=State.set_cfg`) is safe: the
 component does not re-apply a config the viewer itself just emitted.
+
+Server viewers reconnect with exponential backoff (0.5 s doubling, up to 10 s) after a lost
+connection, except when the server refused it for good: a close code in 4400–4499 other than
+4429 (e.g. 4401/4403 from `authorize`, 4409 from `read_only`). Then every viewer of that URL
+stops retrying until the page is reloaded and the browser console explains the code; 4429
+("too many sessions") keeps retrying.
 
 ## Actions
 

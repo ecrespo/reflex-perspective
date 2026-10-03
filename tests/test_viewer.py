@@ -107,3 +107,35 @@ def test_constants():
     assert "Datagrid" in rp.PLUGINS and "Treemap" in rp.PLUGINS
     assert "Pro Dark" in rp.THEMES
     assert "sum" in rp.AGGREGATES
+
+
+class Conn(rx.State):
+    url: str = ""
+    code: int = 0
+
+    @rx.event
+    def lost(self, url: str):
+        self.url = url
+
+    @rx.event
+    def lost_with_code(self, url: str, code: int | None):
+        self.url, self.code = url, code or 0
+
+
+def test_on_disconnect_accepts_url_and_code():
+    """REQ-VIEW-012: on_disconnect passes (url, code); 1-arg handlers still work."""
+    for handler in (Conn.lost, Conn.lost_with_code):
+        js = render(
+            rp.perspective_viewer(
+                server_url="/perspective", server_table="t", on_disconnect=handler
+            )
+        )
+        assert "onDisconnect" in js
+    two = render(
+        rp.perspective_viewer(
+            server_url="/perspective",
+            server_table="t",
+            on_disconnect=Conn.lost_with_code,
+        )
+    )
+    assert "_code" in two

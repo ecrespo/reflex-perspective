@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`0.x`: a breaking change bumps the minor).
 
+## [Unreleased]
+
+### Added
+
+- `on_disconnect` receives `(url, code)` with the WebSocket close code (`None` if unknown);
+  one-argument handlers keep receiving the URL.
+
+### Changed
+
+- Server viewers no longer reconnect after a permanent refusal (close codes 4400–4499 except
+  4429, e.g. 4401/4403 from `authorize` or 4409 from `read_only`); the browser console explains
+  the code once per URL. Reload the page to reconnect.
+
 ## [0.2.0] - 2026-10-03
 
 ### Added
@@ -42,5 +55,6 @@ All notable changes to this project are documented here. The format follows
   check, `perspective_api()`, `mount()`, `run_periodically()`.
 - Demo app.
 
+[Unreleased]: https://github.com/ecrespo/reflex-perspective/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/ecrespo/reflex-perspective/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ecrespo/reflex-perspective/releases/tag/v0.1.0

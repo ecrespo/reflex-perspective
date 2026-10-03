@@ -44,3 +44,5 @@ sólo se implementa tras aprobarla.
 | 2026-10-03 | 6 | hecha | Demo: tarjeta *Access* en `/server` (switch de `authorize` → 4403, contadores, botón de escritura) y `PERSPECTIVE_DEMO_READ_ONLY=1`; README (*Access control*) y `CHANGELOG.md`; 10 pruebas rojo → verde. Pase en Chrome headless: sin variantes fuera de la tabla; escritura del navegador → 4409 en sólo lectura y aplicada en modo escribible |
 | 2026-10-03 | 7 | hecha | Deltas plegados en PRD/API/diseño técnico 1.1; enmienda Art. 3 (aprobada por el mantenedor); `0.2.0` + `uv.lock`; cambios en `_archivo/`; 15 pruebas rojo → verde (tabla §2.2 = código) |
 | 2026-10-03 | 8 | hecha | PR #3 → `develop`, PR #4 → `main` (CI verde; GitHub validó `dependabot.yml`); tag `v0.2.0`; Release run 37125692814 publicó en PyPI y creó la release; instalación limpia de `[server]==0.2.0` verificada |
+
+| 2026-10-03 | 9a | hecha | Puente: sin reintentos ante 4400–4499 salvo 4429, aviso en consola, `on_disconnect(url, code)`; pruebas JS con node:test; pase en navegador (4409, 4403, reinicio) |

@@ -170,6 +170,13 @@ def _bool_spec(value: Var[bool]) -> tuple[Var[bool]]:
     return (value,)
 
 
+def _url_code_spec(
+    url: Var[str], code: Var[int | None]
+) -> tuple[Var[str], Var[int | None]]:
+    """``(url, close code)``; the code is ``None`` when the bridge cannot tell."""
+    return (url, code)
+
+
 class PerspectiveViewer(rx.Component):
     """A ``<perspective-viewer>`` bound to a Perspective ``Table``."""
 
@@ -287,8 +294,9 @@ class PerspectiveViewer(rx.Component):
     on_layout_update: rx.EventHandler[_list_spec]
     on_active_panel_update: rx.EventHandler[_str_spec]
     on_toggle_settings: rx.EventHandler[_bool_spec]
-    # The WebSocket connection to the server was lost (auto-reconnects).
-    on_disconnect: rx.EventHandler[_str_spec]
+    # The WebSocket connection to the server was lost: (url, close code or None).
+    # Reconnects unless the server refused it (4400-4499 except 4429).
+    on_disconnect: rx.EventHandler[_url_code_spec, _str_spec]
     on_error: rx.EventHandler[_str_spec]
 
     @classmethod

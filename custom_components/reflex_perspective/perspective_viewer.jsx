@@ -99,6 +99,63 @@ export function resolveServerUrl(url) {
   return endpoint.toString();
 }
 
+/**
+ * WebSocket close code carried by a client error. Perspective's transport
+ * reports a close to `Client.on_error` as the text "WebSocket closed <code>"
+ * (perspective 5.5.1, `src/ts/websocket.ts`); `null` when there is none.
+ */
+export function closeCodeFromError(error) {
+  const text =
+    typeof error === "string" ? error : String(error?.message ?? error ?? "");
+  const match = /WebSocket closed (\d{4})\b/.exec(text);
+  return match ? Number(match[1]) : null;
+}
+
+/** Server refusals a retry cannot fix: 4400-4499, except 4429 (try later). */
+export function isPermanentRefusal(code) {
+  return Number.isInteger(code) && code >= 4400 && code <= 4499 && code !== 4429;
+}
+
+const REFUSAL_CAUSES = {
+  4401: "not authenticated (the app's authorize hook refused the connection)",
+  4403: "forbidden (the app's authorize hook refused the connection)",
+  4409:
+    "read-only socket: this page sent a write (a server viewer with " +
+    'edit_mode="EDIT", update_rows, remove_keys or rp.update/remove/replace/clear). ' +
+    "Write through the hub in Python instead",
+};
+
+/** Console text for a permanent refusal of `url`. */
+export function refusalMessage(code, url) {
+  const cause = REFUSAL_CAUSES[code] ?? "refused by the server";
+  return (
+    `reflex-perspective: ${url} closed with ${code}: ${cause}. ` +
+    "Not reconnecting until the page is reloaded."
+  );
+}
+
+// URL -> close code of a permanent refusal; such URLs are never retried.
+const WS_REFUSED = new Map();
+
+/** Whether `url` (resolved) was permanently refused by the server. */
+export function isRefused(url) {
+  return WS_REFUSED.has(url);
+}
+
+/**
+ * Record why the socket of `url` (resolved) dropped. A permanent refusal
+ * blocks further retries for that URL and is reported once through `warn`.
+ * Returns the close code, or `null` when the error does not carry one.
+ */
+export function noteClose(url, error, warn = console.warn) {
+  const code = closeCodeFromError(error);
+  if (isPermanentRefusal(code) && !WS_REFUSED.has(url)) {
+    WS_REFUSED.set(url, code);
+    warn(refusalMessage(code, url));
+  }
+  return code;
+}
+
 function evictWebsocketClient(url) {
   WS_CLIENTS.delete(resolveServerUrl(url));
 }
@@ -110,12 +167,13 @@ async function getWebsocketClient(url) {
       const perspective = await loadPerspective();
       const client = await perspective.websocket(resolved);
       try {
-        await client.on_error(() => {
+        await client.on_error((error) => {
+          const code = noteClose(resolved, error);
           // Evict so the next load() opens a fresh connection.
           if (WS_CLIENTS.get(resolved) === promise) WS_CLIENTS.delete(resolved);
           window.dispatchEvent(
             new CustomEvent("reflex-perspective-disconnect", {
-              detail: { url: resolved },
+              detail: { url: resolved, code },
             }),
           );
         });
@@ -503,8 +561,13 @@ export function ReflexPerspectiveViewer(props) {
   const [retryTick, setRetryTick] = useState(0);
   const retryAttempts = useRef(0);
   const retryTimer = useRef(null);
+  // A URL the server refused for good (4400-4499 but 4429) is never retried.
+  const refused = () => {
+    const url = propsRef.current.serverUrl;
+    return Boolean(url) && isRefused(resolveServerUrl(url));
+  };
   const scheduleRetry = useCallback(() => {
-    if (retryTimer.current) return;
+    if (retryTimer.current || refused()) return;
     const delay = Math.min(
       10000,
       500 * 2 ** Math.min(retryAttempts.current, 5),
@@ -512,7 +575,7 @@ export function ReflexPerspectiveViewer(props) {
     retryAttempts.current += 1;
     retryTimer.current = setTimeout(() => {
       retryTimer.current = null;
-      setRetryTick((t) => t + 1);
+      if (!refused()) setRetryTick((t) => t + 1);
     }, delay);
   }, []);
   useEffect(
@@ -869,7 +932,7 @@ export function ReflexPerspectiveViewer(props) {
     const resolved = resolveServerUrl(serverUrl);
     const handler = (e) => {
       if (e.detail?.url !== resolved) return;
-      propsRef.current.onDisconnect?.(resolved);
+      propsRef.current.onDisconnect?.(resolved, e.detail?.code ?? null);
       scheduleRetry();
     };
     window.addEventListener("reflex-perspective-disconnect", handler);
