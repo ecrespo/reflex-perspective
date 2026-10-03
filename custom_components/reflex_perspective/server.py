@@ -29,10 +29,20 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+import importlib.metadata
+import inspect
 import logging
 import threading
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import (
+    Awaitable,
+    Callable,
+    Collection,
+    Iterable,
+    Mapping,
+    Sequence,
+)
 from concurrent.futures import Executor
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 try:
@@ -57,6 +67,201 @@ DEFAULT_PATH = "/perspective"
 
 # WebSocket close code for "policy violation" (RFC 6455 section 7.4.1).
 _WS_POLICY_VIOLATION = 1008
+# WebSocket close code for "internal error" (RFC 6455 section 7.4.1).
+_WS_INTERNAL_ERROR = 1011
+
+Authorize = Callable[[WebSocket], Awaitable[int | None] | int | None]
+"""Hook deciding whether a WebSocket may open a session.
+
+Returns ``None`` to accept, or a close code (4000-4999, or 1008) to refuse.
+"""
+
+WRITE_CLOSE_CODE = 4409
+"""Default close code for a frame refused in read-only mode."""
+
+# ``Request.client_req`` oneof variants that only read, per Perspective version
+# (``rust/perspective-client/perspective.proto``). Indexed by exact version so
+# an upgrade never runs read-only mode with another version's numbering.
+READ_VARIANTS: Mapping[str, frozenset[int]] = MappingProxyType(
+    {
+        "5.5.1": frozenset(
+            {
+                3,  # get_features_req
+                4,  # get_hosted_tables_req
+                5,  # table_make_port_req (sent by the viewer on connect)
+                6,  # table_make_view_req
+                7,  # table_schema_req
+                8,  # table_size_req
+                9,  # table_validate_expr_req
+                10,  # view_column_paths_req
+                11,  # view_delete_req
+                12,  # view_dimensions_req
+                13,  # view_expression_schema_req
+                14,  # view_get_config_req
+                15,  # view_schema_req
+                16,  # view_to_arrow_req
+                17,  # server_system_info_req
+                18,  # view_collapse_req
+                19,  # view_expand_req
+                20,  # view_get_min_max_req
+                21,  # view_on_update_req
+                22,  # view_remove_on_update_req
+                23,  # view_set_depth_req
+                24,  # view_to_columns_string_req
+                25,  # view_to_csv_req
+                26,  # view_to_rows_string_req
+                29,  # table_on_delete_req
+                30,  # table_remove_delete_req
+                34,  # view_on_delete_req
+                35,  # view_remove_delete_req
+                36,  # view_to_ndjson_string_req
+                37,  # remove_hosted_tables_update_req (sent on unmount)
+                39,  # view_on_remove_req
+                40,  # view_remove_on_remove_req
+            }
+        ),
+    }
+)
+
+WRITE_VARIANT_NAMES: Mapping[int, str] = MappingProxyType(
+    {
+        27: "make_table_req",
+        28: "table_delete_req",
+        31: "table_remove_req",
+        32: "table_replace_req",
+        33: "table_update_req",
+        38: "make_join_table_req",
+    }
+)
+"""Known write variants, for logs."""
+
+# ``Request`` envelope fields that are not part of the ``client_req`` oneof.
+_ENVELOPE_FIELDS = frozenset({1, 2})  # msg_id, entity_id
+_WIRE_VARINT, _WIRE_I64, _WIRE_LEN, _WIRE_I32 = 0, 1, 2, 5
+
+
+def _read_varint(buf: bytes, pos: int) -> tuple[int, int]:
+    value = shift = 0
+    while True:
+        if pos >= len(buf) or shift > 63:
+            msg = "truncated varint"
+            raise ValueError(msg)
+        byte = buf[pos]
+        pos += 1
+        value |= (byte & 0x7F) << shift
+        shift += 7
+        if not byte & 0x80:
+            return value, pos
+
+
+def request_variant(payload: bytes) -> int | None:
+    """Field number of the single ``client_req`` variant of a ``Request`` frame.
+
+    Walks every top-level protobuf tag instead of stopping at the first one:
+    in a ``oneof`` the last field wins, so a read placed before a write would
+    otherwise smuggle the write through. Anything that is not exactly one
+    length-delimited variant besides ``msg_id``/``entity_id`` (a second field,
+    an unknown wire type, a length past the end, truncation) returns ``None``.
+    """
+    variant: int | None = None
+    pos = 0
+    try:
+        while pos < len(payload):
+            key, pos = _read_varint(payload, pos)
+            field, wire = key >> 3, key & 0x07
+            if field == 0:
+                return None
+            if wire == _WIRE_VARINT:
+                _, pos = _read_varint(payload, pos)
+            elif wire == _WIRE_LEN:
+                length, pos = _read_varint(payload, pos)
+                pos += length
+            elif wire == _WIRE_I64:
+                pos += 8
+            elif wire == _WIRE_I32:
+                pos += 4
+            else:
+                return None
+            if pos > len(payload):
+                return None
+            if field in _ENVELOPE_FIELDS:
+                continue
+            if variant is not None or wire != _WIRE_LEN:
+                return None
+            variant = field
+    except ValueError:
+        return None
+    return variant
+
+
+def _installed_perspective_version() -> str:
+    return importlib.metadata.version("perspective-python")
+
+
+def _verified_read_variants() -> frozenset[int]:
+    """Read table of the installed ``perspective-python`` (fails closed)."""
+    version = _installed_perspective_version()
+    try:
+        return READ_VARIANTS[version]
+    except KeyError:
+        msg = (
+            f"read_only=True has no verified read table for perspective-python "
+            f"{version} (known: {', '.join(sorted(READ_VARIANTS))}). Pass "
+            "read_variants= explicitly or upgrade reflex-perspective."
+        )
+        raise RuntimeError(msg) from None
+
+
+def _read_only_reads(
+    read_only: bool, write_close_code: int, read_variants: Collection[int] | None
+) -> frozenset[int] | None:
+    """Validate the read-only options; the allowed reads, or ``None`` when off."""
+    if not (type(write_close_code) is int and 4000 <= write_close_code <= 4999):
+        msg = f"write_close_code must be in 4000-4999, got {write_close_code!r}"
+        raise ValueError(msg)
+    if not read_only:
+        return None
+    if read_variants is None:
+        return _verified_read_variants()
+    return frozenset(read_variants)
+
+
+def is_read_request(
+    payload: bytes, read_variants: Collection[int] | None = None
+) -> bool:
+    """Whether a ``Request`` frame is a known read (fails closed).
+
+    Args:
+        payload: A binary WebSocket frame from a Perspective client.
+        read_variants: Allowed variant numbers. ``None`` uses
+            :data:`READ_VARIANTS` for the installed ``perspective-python``.
+    """
+    allowed = _verified_read_variants() if read_variants is None else read_variants
+    variant = request_variant(payload)
+    return variant is not None and variant in allowed
+
+
+def _valid_refusal_code(code: object) -> bool:
+    return type(code) is int and (4000 <= code <= 4999 or code == _WS_POLICY_VIOLATION)
+
+
+async def _run_authorize(authorize: Authorize, websocket: WebSocket) -> int | None:
+    """``None`` to accept, else the close code to use (1011 if the hook fails)."""
+    try:
+        result = authorize(websocket)
+        if inspect.isawaitable(result):
+            result = await result
+    except Exception:
+        logger.exception("Perspective websocket authorize hook failed")
+        return _WS_INTERNAL_ERROR
+    if result is None:
+        return None
+    if not _valid_refusal_code(result):
+        logger.error(
+            "Perspective authorize hook returned invalid close code %r", result
+        )
+        return _WS_INTERNAL_ERROR
+    return result
 
 
 def _default_allowed_origins() -> Sequence[str]:
@@ -222,6 +427,11 @@ class PerspectiveHub:
         websocket: WebSocket,
         executor: Executor | None = None,
         allowed_origins: Sequence[str] | None = None,
+        *,
+        authorize: Authorize | None = None,
+        read_only: bool = False,
+        write_close_code: int = WRITE_CLOSE_CODE,
+        read_variants: Collection[int] | None = None,
     ) -> None:
         """Run a Perspective session over a Starlette WebSocket.
 
@@ -236,7 +446,25 @@ class PerspectiveHub:
                 Reflex event loop.
             allowed_origins: Browser origins allowed to connect. ``None``
                 reuses Reflex's ``cors_allowed_origins``; ``"*"`` allows any.
+            authorize: Called with the WebSocket after the ``Origin`` check and
+                before any Perspective session exists (sync or async). Return
+                ``None`` to accept or a close code (4000-4999, or 1008) to
+                refuse: the socket is then accepted and closed with that code
+                so the browser sees it (a pre-accept close becomes an HTTP 403
+                and the code is lost). A hook that raises or returns another
+                code closes with 1011.
+            read_only: Forward only frames carrying exactly one known read
+                request; anything else (writes, unknown or malformed frames)
+                closes the socket with ``write_close_code``. Writes from
+                Python (``hub.update``...) keep working.
+            write_close_code: Close code for a refused frame (4000-4999).
+            read_variants: Allowed ``Request`` variants in read-only mode.
+                ``None`` uses :data:`READ_VARIANTS` for the installed
+                ``perspective-python`` and raises ``RuntimeError`` if that
+                version has no verified table.
         """
+        allowed_reads = _read_only_reads(read_only, write_close_code, read_variants)
+
         allowed = (
             _default_allowed_origins() if allowed_origins is None else allowed_origins
         )
@@ -245,6 +473,13 @@ class PerspectiveHub:
             logger.warning("Rejected Perspective websocket from origin %r", origin)
             await websocket.close(code=_WS_POLICY_VIOLATION)
             return
+
+        if authorize is not None:
+            refusal = await _run_authorize(authorize, websocket)
+            if refusal is not None:
+                await websocket.accept()
+                await websocket.close(code=refusal)
+                return
 
         loop = asyncio.get_running_loop()
         outbox: asyncio.Queue[bytes | None] = asyncio.Queue()
@@ -280,6 +515,19 @@ class PerspectiveHub:
                     # Only binary protocol frames are meaningful; the engine
                     # aborts the process on empty input, so never forward it.
                     continue
+                if allowed_reads is not None and not is_read_request(
+                    payload, allowed_reads
+                ):
+                    variant = request_variant(payload)
+                    logger.warning(
+                        "Refused Perspective request in read-only mode: variant %s (%s)",
+                        variant,
+                        WRITE_VARIANT_NAMES.get(variant, "unknown")
+                        if variant is not None
+                        else "unreadable",
+                    )
+                    await websocket.close(code=write_close_code)
+                    break
                 # Requests are awaited one at a time, so ordering is preserved.
                 await loop.run_in_executor(executor, session.handle_request, payload)
         except WebSocketDisconnect:
@@ -296,17 +544,34 @@ class PerspectiveHub:
         path: str = DEFAULT_PATH,
         executor: Executor | None = None,
         allowed_origins: Sequence[str] | None = None,
+        *,
+        authorize: Authorize | None = None,
+        read_only: bool = False,
+        write_close_code: int = WRITE_CLOSE_CODE,
+        read_variants: Collection[int] | None = None,
     ) -> Starlette:
         """A Starlette app exposing this hub's WebSocket at ``path``.
 
         Pass it to ``rx.App(api_transformer=...)``; Reflex mounts itself below
-        it, so all regular routes keep working. See :meth:`serve` for
-        ``executor`` and ``allowed_origins``.
+        it, so all regular routes keep working. See :meth:`serve` for the
+        options.
+
+        Raises:
+            ValueError: ``write_close_code`` outside 4000-4999.
+            RuntimeError: ``read_only=True`` without ``read_variants`` on a
+                ``perspective-python`` version with no verified read table.
         """
+        _read_only_reads(read_only, write_close_code, read_variants)
 
         async def endpoint(websocket: WebSocket) -> None:
             await self.serve(
-                websocket, executor=executor, allowed_origins=allowed_origins
+                websocket,
+                executor=executor,
+                allowed_origins=allowed_origins,
+                authorize=authorize,
+                read_only=read_only,
+                write_close_code=write_close_code,
+                read_variants=read_variants,
             )
 
         return Starlette(routes=[WebSocketRoute(path, endpoint)])
@@ -330,15 +595,28 @@ def perspective_api(
     hub: PerspectiveHub | None = None,
     executor: Executor | None = None,
     allowed_origins: Sequence[str] | None = None,
+    *,
+    authorize: Authorize | None = None,
+    read_only: bool = False,
+    write_close_code: int = WRITE_CLOSE_CODE,
+    read_variants: Collection[int] | None = None,
 ) -> Starlette:
     """Build the ``api_transformer`` that serves Perspective at ``path``.
 
+    See :meth:`PerspectiveHub.serve` for the options.
+
     Example::
 
-        app = rx.App(api_transformer=perspective_api())
+        app = rx.App(api_transformer=perspective_api(read_only=True))
     """
     return (hub or get_hub()).asgi_app(
-        path=path, executor=executor, allowed_origins=allowed_origins
+        path=path,
+        executor=executor,
+        allowed_origins=allowed_origins,
+        authorize=authorize,
+        read_only=read_only,
+        write_close_code=write_close_code,
+        read_variants=read_variants,
     )
 
 
@@ -348,17 +626,29 @@ def mount(
     hub: PerspectiveHub | None = None,
     executor: Executor | None = None,
     allowed_origins: Sequence[str] | None = None,
+    *,
+    authorize: Authorize | None = None,
+    read_only: bool = False,
+    write_close_code: int = WRITE_CLOSE_CODE,
+    read_variants: Collection[int] | None = None,
 ) -> PerspectiveHub:
     """Add the Perspective WebSocket to an existing ``rx.App``.
 
-    Keeps any ``api_transformer`` already configured.
+    Keeps any ``api_transformer`` already configured. See
+    :meth:`PerspectiveHub.serve` for the options.
 
     Returns:
         The hub serving the endpoint.
     """
     the_hub = hub or get_hub()
     transformer = the_hub.asgi_app(
-        path=path, executor=executor, allowed_origins=allowed_origins
+        path=path,
+        executor=executor,
+        allowed_origins=allowed_origins,
+        authorize=authorize,
+        read_only=read_only,
+        write_close_code=write_close_code,
+        read_variants=read_variants,
     )
     current = app.api_transformer
     if current is None:
@@ -399,10 +689,15 @@ def run_periodically(
 
 __all__ = [
     "DEFAULT_PATH",
+    "READ_VARIANTS",
+    "WRITE_CLOSE_CODE",
+    "WRITE_VARIANT_NAMES",
     "PerspectiveHub",
     "get_hub",
+    "is_read_request",
     "mount",
     "origin_allowed",
     "perspective_api",
+    "request_variant",
     "run_periodically",
 ]
