@@ -14,6 +14,11 @@ updates:
     target-branch: develop
     schedule:
       interval: weekly
+    # perspective-python moves in lockstep with the npm packages
+    # (PERSPECTIVE_VERSION): upgrade both by hand, see
+    # specs/runbooks/perspective-upgrade.md.
+    ignore:
+      - dependency-name: "perspective-python"
     groups:
       python:
         patterns: ["*"]

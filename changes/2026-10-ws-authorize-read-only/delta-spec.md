@@ -206,8 +206,10 @@ Ninguno.
 ```python
 from reflex_perspective import server as ps
 
-async def autorizar_panel(ws):            # cookie cs_session + rol → None | 4401 | 4403 | 4429
+
+async def autorizar_panel(ws):  # cookie cs_session + rol → None | 4401 | 4403 | 4429
     ...
+
 
 ps.mount(
     app,
