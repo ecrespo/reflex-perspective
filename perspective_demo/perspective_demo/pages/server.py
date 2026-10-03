@@ -6,8 +6,11 @@ import reflex as rx
 
 import reflex_perspective as rp
 
+from ..access import READ_ONLY, Access
 from ..layout import card, page
 from ..live import BIG_ROWS, HUB, MARKET, Feed
+
+BROWSER_WRITE = [{"symbol": "BROWSER", "sector": "Browser write", "price": 1.0}]
 
 
 class ServerState(rx.State):
@@ -17,11 +20,20 @@ class ServerState(rx.State):
     sizes: dict[str, int] = {}
     sector_rows: list[dict] = []
     trades_mode: str = "replicated"
+    read_only: bool = READ_ONLY
+    accepting: bool = True
+    accepted: int = 0
+    refused: int = 0
+    writes_refused: int = 0
 
     @rx.event
     def refresh(self):
         self.running = Feed.running
         self.trades_per_tick = Feed.trades_per_tick
+        self.accepting = Access.accepting
+        self.accepted = Access.accepted
+        self.refused = Access.refused
+        self.writes_refused = Access.writes_refused
         try:
             self.tables = HUB.table_names()
             self.sizes = {name: HUB.size(name) for name in self.tables}
@@ -37,6 +49,11 @@ class ServerState(rx.State):
     def set_rate(self, value: list[int | float]):
         Feed.trades_per_tick = int(value[0])
         self.trades_per_tick = int(value[0])
+
+    @rx.event
+    def toggle_accepting(self, value: bool):
+        Access.accepting = value
+        self.refresh()
 
     @rx.event
     def set_trades_mode(self, value: str):
@@ -93,6 +110,59 @@ def _sizes_badges() -> rx.Component:
             ),
         ),
         wrap="wrap",
+    )
+
+
+def _access_card() -> rx.Component:
+    S = ServerState
+    return card(
+        rx.flex(
+            rx.heading("Access", size="3"),
+            rx.cond(
+                S.read_only,
+                rx.badge(rx.icon("lock", size=12), "read-only", color_scheme="amber"),
+                rx.badge(
+                    rx.icon("lock-open", size=12), "writable", color_scheme="gray"
+                ),
+            ),
+            rx.hstack(
+                rx.switch(checked=S.accepting, on_change=S.toggle_accepting),
+                rx.text("Accept new viewers (authorize hook)", size="2"),
+            ),
+            rx.button(
+                rx.icon("pencil", size=14),
+                "Write from the browser",
+                variant="soft",
+                color_scheme="amber",
+                on_click=rp.update("quotes", BROWSER_WRITE),
+            ),
+            rx.text(
+                "connections ",
+                S.accepted,
+                " accepted · ",
+                S.refused,
+                " refused (4403) · writes refused (4409): ",
+                S.writes_refused,
+                size="2",
+                color=rx.color("gray", 11),
+            ),
+            gap="16px",
+            wrap="wrap",
+            align="center",
+        ),
+        rx.text(
+            rx.cond(
+                S.read_only,
+                "The socket only forwards known read requests: the button above closes the "
+                "quotes viewer's connection with 4409 and it reconnects. The market feed keeps "
+                "writing from Python.",
+                "Writable socket: the button adds a BROWSER row to quotes. Start the demo with "
+                "PERSPECTIVE_DEMO_READ_ONLY=1 to refuse browser writes.",
+            ),
+            size="2",
+            color=rx.color("gray", 10),
+            margin_top="8px",
+        ),
     )
 
 
@@ -179,6 +249,7 @@ def server_page() -> rx.Component:
             ),
             rx.box(_sizes_badges(), margin_top="12px"),
         ),
+        _access_card(),
         rx.grid(
             rx.vstack(
                 rx.hstack(

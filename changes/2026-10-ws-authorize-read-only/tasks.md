@@ -64,7 +64,7 @@
 - **Done**: `test_params_pass_through_mount_and_api`, `test_defaults_unchanged` (las pruebas de
   0.1.0 pasan sin cambios), `test_invalid_write_close_code` en verde; `ruff check` limpio.
 
-### [ ] T-006 · Pase en navegador con la demo en sólo lectura
+### [x] 2026-10-03 T-006 · Pase en navegador con la demo en sólo lectura
 - **Qué**: montar la demo con `read_only=True` detrás de una variable de entorno
   (`PERSPECTIVE_DEMO_READ_ONLY=1`) y recorrer `/server`: cambiar plugin, agrupar, expandir y
   colapsar, cambiar profundidad, filtros, modo `replicated`, cerrar la pestaña. En la página `/api`
@@ -76,7 +76,7 @@
   variantes observadas anotada en el registro de ejecución; si aparece una lectura no listada,
   **parar** y actualizar la tabla y el delta.
 
-### [ ] T-007 · README y CHANGELOG [P con T-006]
+### [x] 2026-10-03 T-007 · README y CHANGELOG [P con T-006]
 - **Qué**: sección de seguridad del README según el MODIFIED del delta; crear `CHANGELOG.md`
   (Keep a Changelog) con `0.2.0` (Added: `authorize`, `read_only`, clasificador público; Security:
   cierre del WebSocket escribible) y `0.1.0`.
@@ -121,4 +121,9 @@ SHOULD diferidos: P-02 (reintentos del puente ante 44xx), P-03 (tope de sesiones
 
 | Fecha | Tareas | Resultado | Notas |
 |---|---|---|---|
-| | | | |
+| 2026-10-03 | T-001 | hecha | Variantes del cliente oficial 5.5.1 = §2.2 (32 lecturas, 6 escrituras) |
+| 2026-10-03 | T-002, T-003 | hecha | Contrato falla con `PERSPECTIVE_VERSION="9.9.9"` |
+| 2026-10-03 | T-004 | hecha | Frame real `size`+`update`: escribe sin `read_only`, 4409 con él (A-01) |
+| 2026-10-03 | T-005 | hecha | Validaciones al construir; clasificador en `__all__` |
+| 2026-10-03 | T-006 | hecha | Chrome headless (Playwright) sobre la demo con `PERSPECTIVE_DEMO_READ_ONLY=1`, `/server`: cambio de plugin, `group_by`, filtro, orden, expand/collapse/`set_depth`, panel de ajustes, `to_csv`, `trades` → modo `server`, cierre de pestaña. Variantes enviadas por el navegador: 3, 4, 5, 6, 7, 9, 11, 12, 13, 14, 15, 16, 18, 19, 21, 22, 23, 24, 25 — **todas en la tabla**, 0 cierres 4409. Botón "Write from the browser" (`rp.update`, variante 33): 4409 + `warning` en sólo lectura; aplicado sin cierre en modo escribible. En lugar de `/api` (visor sólo cliente) se usó la tarjeta *Access* de `/server` |
+| 2026-10-03 | T-007 | hecha | README *Access control*, `CHANGELOG.md` (0.2.0 sin fecha hasta el release) |

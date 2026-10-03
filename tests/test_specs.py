@@ -56,3 +56,26 @@ def test_constitution_is_ratified():
     rows = [r for r in amendments.splitlines() if r.startswith("| 20")]
     assert rows, "the amendments table is empty"
     assert not [r for r in rows if "pendiente" in r.lower()]
+
+
+def test_readme_documents_authorize_and_read_only():
+    """REQ-SRV-017: the README documents the WebSocket access controls."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    for needle in [
+        "authorize=",
+        "read_only=True",
+        "4409",
+        "1011",
+        'edit_mode="EDIT"',
+        "PERSPECTIVE_DEMO_READ_ONLY",
+    ]:
+        assert needle in readme, needle
+    assert "has no authentication" not in readme
+
+
+def test_changelog_lists_releases():
+    """Art. 4: CHANGELOG.md records every release (Keep a Changelog)."""
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "## [0.2.0]" in changelog
+    assert "## [0.1.0]" in changelog
+    assert "### Security" in changelog
