@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`0.x`: a breaking change bumps the minor).
 
-## [0.2.0] - Unreleased
+## [0.2.0] - 2026-10-03
 
 ### Added
 
@@ -42,5 +42,5 @@ All notable changes to this project are documented here. The format follows
   check, `perspective_api()`, `mount()`, `run_periodically()`.
 - Demo app.
 
-[0.2.0]: https://github.com/ecrespo/reflex-perspective/compare/v0.1.0...HEAD
+[0.2.0]: https://github.com/ecrespo/reflex-perspective/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ecrespo/reflex-perspective/releases/tag/v0.1.0
