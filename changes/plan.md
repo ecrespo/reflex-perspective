@@ -47,3 +47,4 @@ sólo se implementa tras aprobarla.
 
 | 2026-10-03 | 9a | hecha | Puente: sin reintentos ante 4400–4499 salvo 4429, aviso en consola, `on_disconnect(url, code)`; pruebas JS con node:test; pase en navegador (4409, 4403, reinicio) |
 | 2026-10-03 | 9b | hecha | `max_sessions` (4429), `on_reject`, `session_count`; demo y pase en navegador. 9c sigue bloqueada (npm y PyPI en 5.5.1) |
+| 2026-10-03 | 9 | 9a y 9b publicadas en 0.3.0 | PR #5 → `develop`, PR #6 → `main` (CI verde; las pruebas JS del puente corrieron en CI); tag `v0.3.0`; Release run 37132172477 publicó en PyPI y creó la release; instalación limpia de `[server]==0.3.0` verificada. 9c sigue bloqueada (Perspective 5.5.1) |
