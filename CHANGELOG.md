@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`0.x`: a breaking change bumps the minor).
 
+## [0.3.0] - 2026-10-03
+
+### Added
+
+- `max_sessions=` on `serve()`, `asgi_app()`, `perspective_api()` and `mount()`: once the hub
+  has that many sessions open, new sockets are refused with 4429 (after `authorize`).
+- `on_reject=` hook called with the close code of every refusal (1008, `authorize`'s code, 1011,
+  4409, 4429), sync or async; its errors are logged and never change the close.
+- `PerspectiveHub.session_count`.
+- Demo: `PERSPECTIVE_DEMO_MAX_SESSIONS`; refusals counted with `on_reject`.
+- `on_disconnect` receives `(url, code)` with the WebSocket close code (`None` if unknown);
+  one-argument handlers keep receiving the URL.
+
+### Changed
+
+- Server viewers no longer reconnect after a permanent refusal (close codes 4400–4499 except
+  4429, e.g. 4401/4403 from `authorize` or 4409 from `read_only`); the browser console explains
+  the code once per URL. Reload the page to reconnect.
+
 ## [0.2.0] - 2026-10-03
 
 ### Added
@@ -42,5 +61,6 @@ All notable changes to this project are documented here. The format follows
   check, `perspective_api()`, `mount()`, `run_periodically()`.
 - Demo app.
 
+[0.3.0]: https://github.com/ecrespo/reflex-perspective/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ecrespo/reflex-perspective/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ecrespo/reflex-perspective/releases/tag/v0.1.0

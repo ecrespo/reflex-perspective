@@ -81,10 +81,12 @@ def test_changelog_lists_releases():
     assert "### Security" in changelog
 
 
-FOLDED_REQS = [f"REQ-SRV-0{n}" for n in range(10, 19)] + [
+FOLDED_REQS = [f"REQ-SRV-0{n}" for n in range(10, 24)] + [
     "REQ-VER-003",
     "REQ-VER-004",
     "REQ-VER-005",
+    "REQ-VIEW-011",
+    "REQ-VIEW-012",
 ]
 
 

@@ -6,7 +6,7 @@ import reflex as rx
 
 import reflex_perspective as rp
 
-from ..access import READ_ONLY, Access
+from ..access import MAX_SESSIONS, READ_ONLY, Access, rejection_summary
 from ..layout import card, page
 from ..live import BIG_ROWS, HUB, MARKET, Feed
 
@@ -22,18 +22,24 @@ class ServerState(rx.State):
     trades_mode: str = "replicated"
     read_only: bool = READ_ONLY
     accepting: bool = True
-    accepted: int = 0
-    refused: int = 0
-    writes_refused: int = 0
+    max_sessions: str = str(MAX_SESSIONS or "∞")
+    sessions: int = 0
+    rejections: str = ""
+    last_disconnect: str = ""
+
+    @rx.event
+    def disconnected(self, url: str, code: int | None):
+        """on_disconnect(url, code): show why the socket dropped."""
+        self.last_disconnect = f"{code if code is not None else 'unknown'} · {url}"
+        self.refresh()
 
     @rx.event
     def refresh(self):
         self.running = Feed.running
         self.trades_per_tick = Feed.trades_per_tick
         self.accepting = Access.accepting
-        self.accepted = Access.accepted
-        self.refused = Access.refused
-        self.writes_refused = Access.writes_refused
+        self.sessions = HUB.session_count
+        self.rejections = rejection_summary()
         try:
             self.tables = HUB.table_names()
             self.sizes = {name: HUB.size(name) for name in self.tables}
@@ -137,14 +143,24 @@ def _access_card() -> rx.Component:
                 on_click=rp.update("quotes", BROWSER_WRITE),
             ),
             rx.text(
-                "connections ",
-                S.accepted,
-                " accepted · ",
-                S.refused,
-                " refused (4403) · writes refused (4409): ",
-                S.writes_refused,
+                "sessions open ",
+                S.sessions,
+                " / ",
+                S.max_sessions,
+                " · refused by code (on_reject): ",
+                rx.cond(S.rejections != "", S.rejections, "none"),
                 size="2",
                 color=rx.color("gray", 11),
+            ),
+            rx.cond(
+                S.last_disconnect != "",
+                rx.badge(
+                    rx.icon("unplug", size=12),
+                    "last disconnect: ",
+                    S.last_disconnect,
+                    color_scheme="red",
+                    variant="soft",
+                ),
             ),
             gap="16px",
             wrap="wrap",
@@ -154,8 +170,9 @@ def _access_card() -> rx.Component:
             rx.cond(
                 S.read_only,
                 "The socket only forwards known read requests: the button above closes the "
-                "quotes viewer's connection with 4409 and it reconnects. The market feed keeps "
-                "writing from Python.",
+                "connection with 4409; the viewers stop reconnecting and the browser console "
+                "explains why (reload the page to reconnect). The market feed keeps writing "
+                "from Python.",
                 "Writable socket: the button adds a BROWSER row to quotes. Start the demo with "
                 "PERSPECTIVE_DEMO_READ_ONLY=1 to refuse browser writes.",
             ),
@@ -260,6 +277,7 @@ def server_page() -> rx.Component:
                 rp.perspective_viewer(
                     id="quotes",
                     server_url="/perspective",
+                    on_disconnect=ServerState.disconnected,
                     server_table="quotes",
                     plugin="Datagrid",
                     columns=[
@@ -298,6 +316,7 @@ def server_page() -> rx.Component:
                 rp.perspective_viewer(
                     id="trades",
                     server_url="/perspective",
+                    on_disconnect=ServerState.disconnected,
                     server_table="trades",
                     server_mode=S.trades_mode,
                     plugin="Y Bar",
@@ -328,6 +347,7 @@ def server_page() -> rx.Component:
             rp.perspective_viewer(
                 id="orders",
                 server_url="/perspective",
+                on_disconnect=ServerState.disconnected,
                 server_table="orders",
                 plugin="Datagrid",
                 group_by=["Region", "Category"],

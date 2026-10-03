@@ -619,6 +619,8 @@ def test_defaults_unchanged(func):
         "read_only": False,
         "write_close_code": 4409,
         "read_variants": None,
+        "max_sessions": None,
+        "on_reject": None,
     }
     for name, default in new.items():
         assert params[name].kind is inspect.Parameter.KEYWORD_ONLY, name
@@ -672,3 +674,148 @@ def test_classifier_is_public():
         "request_variant",
     ]:
         assert name in ps.__all__
+
+
+# ------------------------------------------------- session cap and on_reject
+def wait_for(predicate, timeout=5.0):
+    """Server-side cleanup runs after the client closes; poll briefly."""
+    import time
+
+    deadline = time.monotonic() + timeout
+    while not predicate():
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.02)
+    return True
+
+
+def test_session_count():
+    """REQ-SRV-022: open WebSocket sessions are counted and released."""
+    hub = seeded_hub()
+    assert hub.session_count == 0
+    with TestClient(hub.asgi_app("/perspective")) as client:
+        with client.websocket_connect("/perspective") as a:
+            live_client(a).open_table("t").size()
+            with client.websocket_connect("/perspective") as b:
+                live_client(b).open_table("t").size()
+                assert hub.session_count == 2
+        assert wait_for(lambda: hub.session_count == 0)
+
+
+def test_max_sessions_refuses_with_4429():
+    """REQ-SRV-019: a full hub refuses new sockets with 4429, without a session."""
+    hub = seeded_hub(SpyServer())
+    app = hub.asgi_app("/perspective", max_sessions=1)
+    with TestClient(app) as client:
+        with client.websocket_connect("/perspective") as first:
+            assert live_client(first).open_table("t").size() == 1
+            with client.websocket_connect("/perspective") as second:
+                assert close_code(second) == 4429
+            assert hub.server.sessions == 1
+        assert wait_for(lambda: hub.session_count == 0)
+        with client.websocket_connect("/perspective") as third:
+            assert live_client(third).open_table("t").size() == 1
+
+
+def test_cap_checked_after_authorize():
+    """REQ-SRV-019: the authorize verdict wins over a full hub."""
+    hub = seeded_hub()
+    verdict = {"code": None}
+    app = hub.asgi_app(
+        "/perspective", max_sessions=1, authorize=lambda ws: verdict["code"]
+    )
+    with TestClient(app) as client, client.websocket_connect("/perspective") as a:
+        live_client(a).open_table("t").size()
+        verdict["code"] = 4403
+        with client.websocket_connect("/perspective") as b:
+            assert close_code(b) == 4403
+
+
+@pytest.mark.parametrize("value", [0, -1, 1.5, True, "2"])
+@pytest.mark.parametrize("build", ["asgi_app", "perspective_api", "mount"])
+def test_invalid_max_sessions(build, value):
+    """REQ-SRV-023: max_sessions must be an int >= 1."""
+    hub = make_hub()
+    builders = {
+        "asgi_app": lambda: hub.asgi_app(max_sessions=value),
+        "perspective_api": lambda: ps.perspective_api(hub=hub, max_sessions=value),
+        "mount": lambda: ps.mount(FakeApp(), hub=hub, max_sessions=value),
+    }
+    with pytest.raises(ValueError, match="max_sessions"):
+        builders[build]()
+
+
+def _reject_scenario(name, hub, on_reject):
+    """Open one socket that gets refused for ``name``; return its close code."""
+    kw = {"on_reject": on_reject}
+    headers = {}
+    if name == "origin":
+        kw["allowed_origins"] = ["http://app.test"]
+        headers = {"origin": "http://evil.test"}
+    elif name == "authorize":
+        kw["authorize"] = lambda ws: 4401
+    elif name == "authorize_error":
+        kw["authorize"] = lambda ws: 1 / 0
+    elif name == "read_only":
+        kw["read_only"] = True
+    elif name == "cap":
+        kw["max_sessions"] = 1
+    app = hub.asgi_app("/perspective", **kw)
+    with TestClient(app) as client:
+        if name == "origin":
+            with (
+                pytest.raises(WebSocketDisconnect) as exc,
+                client.websocket_connect("/perspective", headers=headers),
+            ):
+                pass
+            return exc.value.code
+        if name == "cap":
+            with client.websocket_connect("/perspective") as keep:
+                live_client(keep).open_table("t").size()
+                with client.websocket_connect("/perspective") as ws:
+                    return close_code(ws)
+        with client.websocket_connect("/perspective") as ws:
+            if name == "read_only":
+                ws.send_bytes(frame("update"))
+            return close_code(ws)
+
+
+REJECTIONS = {
+    "origin": 1008,
+    "authorize": 4401,
+    "authorize_error": 1011,
+    "read_only": 4409,
+    "cap": 4429,
+}
+
+
+@pytest.mark.parametrize("asynchronous", [False, True], ids=["sync", "async"])
+@pytest.mark.parametrize("name", list(REJECTIONS))
+def test_on_reject_reports_each_code(name, asynchronous):
+    """REQ-SRV-020: every refusal reaches on_reject with its close code."""
+    calls = []
+
+    def hook(code, websocket):
+        calls.append((code, websocket))
+
+    async def hook_async(code, websocket):
+        await asyncio.sleep(0)
+        calls.append((code, websocket))
+
+    code = _reject_scenario(name, seeded_hub(), hook_async if asynchronous else hook)
+    assert code == REJECTIONS[name]
+    assert [c for c, _ in calls] == [REJECTIONS[name]]
+    assert isinstance(calls[0][1], WebSocket)
+
+
+@pytest.mark.parametrize("name", ["authorize", "read_only", "cap"])
+def test_on_reject_error_keeps_close_code(name, caplog):
+    """REQ-SRV-021: a failing on_reject is logged and the close code stands."""
+
+    def boom(code, websocket):
+        raise RuntimeError("metrics backend down")
+
+    with caplog.at_level(logging.ERROR, logger="reflex_perspective.server"):
+        code = _reject_scenario(name, seeded_hub(), boom)
+    assert code == REJECTIONS[name]
+    assert any(r.exc_info for r in caplog.records)

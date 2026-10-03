@@ -145,7 +145,9 @@ class PerspectiveViewer(rx.Component):
         on_click: Optional[EventType[()] | EventType[dict[str, Any]]] = None,
         on_config_update: Optional[EventType[()] | EventType[dict[str, Any]]] = None,
         on_context_menu: Optional[EventType[()] | EventType[PointerEventInfo]] = None,
-        on_disconnect: Optional[EventType[()] | EventType[str]] = None,
+        on_disconnect: Optional[
+            EventType[()] | EventType[str] | EventType[str, int | None]
+        ] = None,
         on_double_click: Optional[EventType[()] | EventType[PointerEventInfo]] = None,
         on_error: Optional[EventType[()] | EventType[str]] = None,
         on_focus: Optional[EventType[()]] = None,
@@ -236,7 +238,7 @@ class PerspectiveViewer(rx.Component):
             on_layout_update: Panels were added/removed in a multi-panel viewer.
             on_active_panel_update: no description
             on_toggle_settings: no description
-            on_disconnect: The WebSocket connection to the server was lost (auto-reconnects).
+            on_disconnect: The WebSocket connection to the server was lost: (url, close code or None). Reconnects unless the server refused it (4400-4499 except 4429).
             on_error: no description
             **props: Component props, see the class attributes.
 

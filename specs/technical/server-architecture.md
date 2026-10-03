@@ -1,6 +1,6 @@
 # Diseño técnico — modo servidor de reflex-perspective
 
-> Versión de la spec: 1.1 (librería `0.2.0`) · Fecha: 2026-10-03
+> Versión de la spec: 1.2 (librería `0.3.0`) · Fecha: 2026-10-03
 > PRD §4.2 · API [`../api/server-api-v1.md`](../api/server-api-v1.md)
 
 ## 1. Contexto
@@ -11,6 +11,8 @@ navegador                           backend Reflex (un proceso)
   @perspective-dev/client ──WS──▶   ruta /perspective → PerspectiveHub.serve()
                                         │ origin_allowed()            (REQ-SRV-003)
                                         │ authorize(websocket)        (REQ-SRV-010…012)
+                                        │ tope max_sessions → 4429    (REQ-SRV-019)
+                                        │ on_reject(code, ws) en cada rechazo (REQ-SRV-020)
                                         │ server.new_session(send)
                                         │ is_read_request() si read_only (REQ-SRV-013/014)
                                         │ loop.run_in_executor(handle_request)  (Art. 6)
@@ -24,10 +26,10 @@ navegador                           backend Reflex (un proceso)
 | Componente | Responsabilidad | No hace |
 |---|---|---|
 | `PerspectiveHub` | Servidor + cliente local, caché de handles, helpers de tablas | Persistir tablas |
-| `serve()` | Origen, `authorize`, sesión, clasificación en sólo lectura, reenvío al motor, cola de salida | Autorización por tabla, tope de sesiones |
+| `serve()` | Origen, `authorize`, tope de sesiones, `on_reject`, sesión, clasificación en sólo lectura, reenvío al motor, cola de salida | Autorización por tabla |
 | Clasificador (`request_variant`, `is_read_request`, `READ_VARIANTS`) | Decidir si un frame es exactamente una lectura conocida de la versión pineada | Decodificar el protobuf completo |
 | `asgi_app` / `perspective_api` / `mount` | Exponer `serve()` como ruta Starlette en `api_transformer` | — |
-| Puente JSX | `perspective.websocket(url)`, caché de clientes por URL, reintentos | Distinguir códigos de cierre |
+| Puente JSX | `perspective.websocket(url)`, caché de clientes por URL, reintentos; lee el código de cierre del error de `on_error` y no reintenta 4400–4499 salvo 4429 (DD-010) | Reintentos configurables |
 
 ## 3. Decisiones
 
@@ -78,7 +80,21 @@ su esquema en Python.
 `read_only=True` no arranca (REQ-SRV-015) salvo `read_variants` explícito. Así una subida de
 Perspective nunca deja el modo sólo lectura funcionando con números de otra versión.
 
-## 4. Seguridad (estado 0.2.0)
+### DD-009: Tope y métricas dentro de `serve()`
+Orden: `Origin` → `authorize` → tope → `accept()` → sesión. El contador vive en el hub (protegido
+por su lock), se incrementa al admitir y se libera en el `finally` de la sesión. `on_reject` se
+llama justo antes de cada cierre de rechazo; sus errores se registran y nunca cambian el código
+ni reabren la conexión.
+
+### DD-010: Código de cierre en el puente a partir de `on_error`
+`perspective.websocket()` crea el socket por dentro y el build de navegador no exporta `Client`
+para montar un transporte propio. El transporte oficial informa el cierre a `Client.on_error`
+con el texto `WebSocket closed <código>` (5.5.1); el puente lo extrae (`closeCodeFromError`).
+Ante 4400–4499 salvo 4429 registra la URL como rechazada, avisa una vez en consola y bloquea los
+reintentos de todos los visores de esa URL hasta recargar. Alternativa descartada: sustituir
+`window.WebSocket`, que afectaría a todos los sockets de la página (incluido el de Reflex).
+
+## 4. Seguridad (estado 0.3.0)
 
 | Amenaza | Mitigación | Hueco restante |
 |---|---|---|
@@ -88,6 +104,8 @@ Perspective nunca deja el modo sólo lectura funcionando con números de otra ve
 | Frame manipulado que esconde una escritura tras una lectura | Clasificador de un único campo (DD-007) | — |
 | Subida de Perspective con variantes renumeradas o nuevas | Tabla por versión, prueba de contrato, fallar cerrado (DD-008) | — |
 | Usuario exporta lo que ve (`view_to_*`) | — | Fuera de alcance: son lecturas |
+| Exceso de sesiones agota el servidor | `max_sessions` (DD-009) cuando la app lo pasa | Por omisión sin tope; tope por proceso |
+| Reintentos en bucle tras un rechazo | Puente sin reintentos ante 44xx salvo 4429 (DD-010) | — |
 
 El README advierte que los dos controles se activan juntos en despliegues con más de un
 usuario.

@@ -1,6 +1,6 @@
 # API — `reflex_perspective.server` v1
 
-> Versión de la spec: 1.1 (librería `0.2.0`) · Fecha: 2026-10-03
+> Versión de la spec: 1.2 (librería `0.3.0`) · Fecha: 2026-10-03
 > PRD: [`../prd/reflex-perspective.md`](../prd/reflex-perspective.md) §4.2
 
 Contrato público del módulo servidor. Requiere el extra `server`
@@ -14,7 +14,7 @@ Contrato público del módulo servidor. Requiere el extra `server`
 | `DEFAULT_PATH` | `"/perspective"` | REQ-SRV-002 |
 | `PerspectiveHub` | `PerspectiveHub(server: perspective.Server \| None = None)` | REQ-SRV-001 |
 | `get_hub` | `get_hub() -> PerspectiveHub` (hub del proceso, perezoso) | REQ-SRV-001 |
-| `perspective_api` | `perspective_api(path=DEFAULT_PATH, hub=None, executor=None, allowed_origins=None, *, authorize=None, read_only=False, write_close_code=4409, read_variants=None) -> Starlette` | REQ-SRV-002/003/017 |
+| `perspective_api` | `perspective_api(path=DEFAULT_PATH, hub=None, executor=None, allowed_origins=None, *, authorize=None, read_only=False, write_close_code=4409, read_variants=None, max_sessions=None, on_reject=None) -> Starlette` | REQ-SRV-002/003/017 |
 | `mount` | `mount(app, path=DEFAULT_PATH, hub=None, executor=None, allowed_origins=None, *, …mismos…) -> PerspectiveHub` | REQ-SRV-005/017 |
 | `origin_allowed` | `origin_allowed(origin: str \| None, allowed: Sequence[str]) -> bool` | REQ-SRV-003 |
 | `run_periodically` | `run_periodically(func, interval: float) -> Callable` | REQ-SRV-006 |
@@ -34,6 +34,7 @@ Opciones de acceso (sólo por palabra clave en `serve()`, `asgi_app()`, `perspec
 
 ```python
 Authorize = Callable[[WebSocket], Awaitable[int | None] | int | None]
+OnReject = Callable[[int, WebSocket], Awaitable[None] | None]
 
 async def PerspectiveHub.serve(
     websocket, executor=None, allowed_origins=None, *,
@@ -41,11 +42,16 @@ async def PerspectiveHub.serve(
     read_only: bool = False,
     write_close_code: int = 4409,
     read_variants: Collection[int] | None = None,
+    max_sessions: int | None = None,
+    on_reject: OnReject | None = None,
 ) -> None
 ```
 
-`authorize` puede ser síncrono o asíncrono. Al construir la app: `ValueError` si
-`write_close_code` está fuera de 4000–4999 (REQ-SRV-018); `RuntimeError` si `read_only=True` sin
+`authorize` y `on_reject` pueden ser síncronos o asíncronos. `on_reject(code, websocket)` se
+llama antes de cada cierre de rechazo (REQ-SRV-020); sus errores se registran y no cambian el
+cierre (REQ-SRV-021). `max_sessions` cuenta todas las sesiones del hub (REQ-SRV-019). Al
+construir la app: `ValueError` si `write_close_code` está fuera de 4000–4999 (REQ-SRV-018) o
+`max_sessions` no es un entero ≥ 1 (REQ-SRV-023); `RuntimeError` si `read_only=True` sin
 `read_variants` en una versión sin tabla verificada (REQ-SRV-015).
 
 ### 1.1 `PerspectiveHub`
@@ -58,6 +64,7 @@ async def PerspectiveHub.serve(
 | `delete_table(name)` | Borra (perezoso) |
 | `update(name, data, **kw)` / `remove(name, keys)` / `clear(name)` | Escrituras desde Python |
 | `size(name)` / `query(name, **view_config)` | Lecturas desde Python |
+| `session_count` (propiedad) | Sesiones WebSocket abiertas en el hub (REQ-SRV-022) |
 | `serve(websocket, executor=None, allowed_origins=None, *, authorize=None, read_only=False, write_close_code=4409, read_variants=None)` | Sesión WebSocket (§2) |
 | `asgi_app(path=DEFAULT_PATH, executor=None, allowed_origins=None, *, …mismas opciones…)` | `Starlette` con la ruta WebSocket |
 
@@ -70,7 +77,7 @@ async def PerspectiveHub.serve(
   cliente, `Response` del servidor) de la versión `PERSPECTIVE_VERSION`.
 - Frames vacíos o de texto: se descartan (REQ-SRV-004).
 - Orden: las peticiones de una sesión se ejecutan de a una, en orden de llegada.
-- Controles, en orden (DD-005): `Origin` → `authorize` → `accept()` → sesión → por frame:
+- Controles, en orden (DD-005, DD-009): `Origin` → `authorize` → tope de sesiones → `accept()` → sesión → por frame:
   descartar vacío/texto → clasificar si `read_only` → executor.
 
 ### 2.1 Códigos de cierre
@@ -81,6 +88,7 @@ async def PerspectiveHub.serve(
 | código de `authorize` (4000–4999 o 1008) | Autorización denegada (REQ-SRV-011) | Después, sin sesión |
 | 1011 | `authorize` falló o devolvió un código inválido (REQ-SRV-012) | Después, sin sesión |
 | `write_close_code` (4409) | Frame no permitido en sólo lectura (REQ-SRV-014) | Con sesión; se cierra |
+| 4429 | Tope de sesiones alcanzado (REQ-SRV-019); el visor lo trata como transitorio y reintenta | Después, sin sesión |
 | 1000/1001 | Cierre normal del cliente | — |
 
 Por omisión no hay autenticación ni control de escrituras (compatibilidad con 0.1.0); se
@@ -127,6 +135,7 @@ cliente oficial y con un pase en navegador sobre la demo el 2026-10-03.
 | `server_url` | `str` | Ruta (relativa al backend de Reflex) o URL `ws://` absoluta |
 | `server_table` | `str` | Nombre de la tabla hospedada |
 | `server_mode` | `"server" \| "replicated"` | Virtual (por omisión) o réplica en el navegador |
+| `on_disconnect` | evento `(url, code)` | Conexión perdida; `code` es el código de cierre o `None`. Ante 4400–4499 salvo 4429 el visor no reintenta esa URL hasta recargar (REQ-VIEW-011/012) |
 
 Escrituras del navegador sobre una tabla de servidor (`update_rows`, `remove_keys`,
 `rp.update`, `rp.remove`, `rp.replace`, `rp.clear`, `edit_mode="EDIT"`) viajan por el
