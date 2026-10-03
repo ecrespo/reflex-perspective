@@ -4,6 +4,8 @@ Pages:
     /            Explorer          client-only table driven by state props
     /streaming   Client streaming  background task -> update_rows / rp.update
     /server      Python server     perspective-python tables over a WebSocket
+                                   (authorize hook; PERSPECTIVE_DEMO_READ_ONLY=1
+                                   makes the socket read-only)
     /workspace   Workspace         multi-panel layout with global filters
     /api         Actions & events  imperative API, callbacks, editable grid
     /gallery     Plugin gallery    every chart plugin with a different theme
@@ -13,6 +15,7 @@ import reflex as rx
 
 from reflex_perspective import server as ps
 
+from .access import ws_options
 from .live import HUB, market_feed
 from .pages.api import api_page
 from .pages.explorer import explorer
@@ -22,8 +25,9 @@ from .pages.streaming import streaming
 from .pages.workspace import workspace_page
 
 app = rx.App(
-    # Serve perspective-python's WebSocket protocol at /perspective on the backend.
-    api_transformer=ps.perspective_api(path="/perspective", hub=HUB),
+    # Serve perspective-python's WebSocket protocol at /perspective on the backend,
+    # behind an authorize hook and, with PERSPECTIVE_DEMO_READ_ONLY=1, read-only.
+    api_transformer=ps.perspective_api(path="/perspective", hub=HUB, **ws_options()),
 )
 app.register_lifespan_task(market_feed)
 

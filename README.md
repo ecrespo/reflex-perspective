@@ -110,10 +110,52 @@ WebSocket handler marshals messages back onto the event loop. Engine requests ru
 event loop's default thread pool (pass `executor=` to `perspective_api()` / `mount()` to use
 your own), so a heavy pivot on a large table never blocks other Reflex events.
 
-The endpoint checks the browser `Origin` header against Reflex's `cors_allowed_origins`
-(or `allowed_origins=[...]` passed to `perspective_api()` / `mount()`), closing foreign
-connections with code 1008. Set explicit origins in production: the Reflex default (`"*"`)
-lets any site open the socket, and hosted tables are writable over it.
+### Access control
+
+By default (as in 0.1.0) the endpoint only checks the browser `Origin` header against
+Reflex's `cors_allowed_origins` (or `allowed_origins=[...]`), closing foreign connections
+with code 1008, and **any client that reaches it can read and modify every hosted table**.
+For any deployment with more than one user, set explicit origins and use **both** options
+below (keyword-only on `perspective_api()`, `mount()`, `asgi_app()` and `serve()`):
+
+```python
+async def authorize_panel(websocket):  # sync or async
+    user = await user_from_cookie(websocket.cookies.get("session"))
+    if user is None:
+        return 4401  # refuse: close code 4000-4999 (or 1008)
+    if not user.can_view_analytics:
+        return 4403
+    return None  # accept
+
+
+ps.mount(
+    app,
+    path="/analytics/ws",
+    allowed_origins=["https://app.example.com"],
+    authorize=authorize_panel,
+    read_only=True,
+)
+```
+
+- `authorize=` runs after the `Origin` check and **before** any Perspective session exists.
+  A refusal accepts the socket and closes it at once with your code, so the browser sees it
+  (closing before the handshake would turn it into an HTTP 403 and the browser would only
+  see 1006). A hook that raises, or returns anything other than `None`, 4000–4999 or 1008,
+  closes with **1011** and is logged.
+- `read_only=True` forwards only frames carrying exactly one known **read** request of the
+  pinned Perspective version (`ps.READ_VARIANTS`); writes (`update`, `remove`,
+  `replace`/`clear`, table `delete`, new tables, joins), unknown variants and malformed or
+  tampered frames close the socket with **4409** (`write_close_code=` to change it) and are
+  logged by variant number and name, never by content. Writes from Python (`hub.update()`,
+  lifespan tasks) keep reaching every viewer. On a `perspective-python` version without a
+  verified read table, building the app raises `RuntimeError` unless you pass
+  `read_variants=`.
+- With `read_only=True`, a server viewer with `edit_mode="EDIT"`, `update_rows`,
+  `remove_keys` or `rp.update/remove/replace/clear` gets its socket closed with 4409 (and
+  the viewer reconnects). Write through the hub instead. Read-only does not stop users from
+  exporting what they can see (`view_to_*` reads stay allowed).
+- `ps.request_variant()` and `ps.is_read_request()` are public, for apps that compose
+  their own handler around `hub.serve()`.
 
 `PerspectiveHub` helpers: `table()`, `get_table()`, `has_table()`, `table_names()`,
 `update()`, `remove()`, `clear()`, `size()`, `query(name, **view_config)` and
@@ -242,10 +284,13 @@ uv run reflex run
 | --- | --- |
 | `/` Explorer | Declarative props driven by state controls, click/select/config events |
 | `/streaming` | Background task streaming through `update_rows`, `rp.update` bursts, callbacks |
-| `/server` | perspective-python tables over a WebSocket: live market feed, 250k-row virtual table, replicated mode, Python-side queries |
+| `/server` | perspective-python tables over a WebSocket: live market feed, 250k-row virtual table, replicated mode, Python-side queries, `authorize` switch and read-only mode |
 | `/workspace` | Multi-panel dashboards, master panels, global filters, `saveWorkspace()` |
 | `/api` | Imperative actions, named layouts, editable datagrid, mutations, event log |
 | `/gallery` | Every chart plugin with a different theme |
+
+Run it with `PERSPECTIVE_DEMO_READ_ONLY=1 uv run reflex run` to serve the WebSocket in
+read-only mode: the "Write from the browser" button on `/server` is then refused with 4409.
 
 | | |
 | --- | --- |
@@ -256,7 +301,7 @@ uv run reflex run
 
 - Keep `perspective-python` and the npm packages on the same version (`rp.PERSPECTIVE_VERSION`); the WebSocket protocol is versioned together.
 - Server tables live in the backend process. With several backend workers each worker has its own hub; use a single worker or an external Perspective server (`server_url="ws://..."`) for shared tables.
-- Apart from the `Origin` check, the WebSocket endpoint has no authentication, just like Perspective's own handlers. Any client that can reach it can read **and modify** every hosted table. Put it behind your auth (e.g. a Starlette middleware in `api_transformer`) before exposing it to untrusted networks.
+- Unless you pass `authorize=` and `read_only=True` (see [Access control](#access-control)), any client that passes the `Origin` check can read **and modify** every hosted table, just like with Perspective's own handlers.
 - `update_rows` / `rp.update` write to the viewer's own table. In `server` mode that's the shared hosted table; in `replicated` mode it's only the browser replica (write through the hub to reach every viewer).
 - On the very first `reflex run` after installing, Vite may pre-bundle the new npm dependencies while the page loads; reload once if the viewer does not appear.
 

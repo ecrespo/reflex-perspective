@@ -93,6 +93,8 @@ jobs:
           py=$(grep -m1 '^version' pyproject.toml | cut -d'"' -f2)
           mod=$(grep -m1 '^__version__' custom_components/reflex_perspective/__init__.py | cut -d'"' -f2)
           [ "$py" = "$mod" ] || { echo "::error::pyproject ($py) != __version__ ($mod)"; exit 1; }
+      - name: Check Perspective versions are in sync
+        run: uv run --no-project python scripts/check_perspective_versions.py
       - uses: actions/upload-artifact@v7
         with:
           name: dist
