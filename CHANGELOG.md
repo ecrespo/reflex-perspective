@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `max_sessions=` on `serve()`, `asgi_app()`, `perspective_api()` and `mount()`: once the hub
+  has that many sessions open, new sockets are refused with 4429 (after `authorize`).
+- `on_reject=` hook called with the close code of every refusal (1008, `authorize`'s code, 1011,
+  4409, 4429), sync or async; its errors are logged and never change the close.
+- `PerspectiveHub.session_count`.
+- Demo: `PERSPECTIVE_DEMO_MAX_SESSIONS`; refusals counted with `on_reject`.
 - `on_disconnect` receives `(url, code)` with the WebSocket close code (`None` if unknown);
   one-argument handlers keep receiving the URL.
 

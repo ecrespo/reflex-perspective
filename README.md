@@ -154,6 +154,13 @@ ps.mount(
   `remove_keys` or `rp.update/remove/replace/clear` gets its socket closed with 4409; the
   viewers stop reconnecting and the browser console says why. Write through the hub instead. Read-only does not stop users from
   exporting what they can see (`view_to_*` reads stay allowed).
+- `max_sessions=N` caps the sessions open on the hub (across all its routes). Once reached,
+  new sockets are accepted and closed with **4429** after `authorize`; the viewers keep
+  retrying with backoff and connect when a slot frees up. `hub.session_count` gives the
+  current number.
+- `on_reject=fn` is called as `fn(code, websocket)` (sync or async) before every refusal
+  (1008, `authorize`'s code, 1011, 4409 and 4429), for metrics. Its errors are logged and never
+  change the close.
 - `ps.request_variant()` and `ps.is_read_request()` are public, for apps that compose
   their own handler around `hub.serve()`.
 
@@ -298,6 +305,8 @@ uv run reflex run
 
 Run it with `PERSPECTIVE_DEMO_READ_ONLY=1 uv run reflex run` to serve the WebSocket in
 read-only mode: the "Write from the browser" button on `/server` is then refused with 4409.
+`PERSPECTIVE_DEMO_MAX_SESSIONS=1` caps the hub: a second tab gets 4429 until the first closes.
+The access card counts refusals by code through `on_reject`.
 
 | | |
 | --- | --- |

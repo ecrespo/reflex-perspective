@@ -46,3 +46,4 @@ sólo se implementa tras aprobarla.
 | 2026-10-03 | 8 | hecha | PR #3 → `develop`, PR #4 → `main` (CI verde; GitHub validó `dependabot.yml`); tag `v0.2.0`; Release run 37125692814 publicó en PyPI y creó la release; instalación limpia de `[server]==0.2.0` verificada |
 
 | 2026-10-03 | 9a | hecha | Puente: sin reintentos ante 4400–4499 salvo 4429, aviso en consola, `on_disconnect(url, code)`; pruebas JS con node:test; pase en navegador (4409, 4403, reinicio) |
+| 2026-10-03 | 9b | hecha | `max_sessions` (4429), `on_reject`, `session_count`; demo y pase en navegador. 9c sigue bloqueada (npm y PyPI en 5.5.1) |

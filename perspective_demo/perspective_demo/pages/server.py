@@ -6,7 +6,7 @@ import reflex as rx
 
 import reflex_perspective as rp
 
-from ..access import READ_ONLY, Access
+from ..access import MAX_SESSIONS, READ_ONLY, Access, rejection_summary
 from ..layout import card, page
 from ..live import BIG_ROWS, HUB, MARKET, Feed
 
@@ -22,9 +22,9 @@ class ServerState(rx.State):
     trades_mode: str = "replicated"
     read_only: bool = READ_ONLY
     accepting: bool = True
-    accepted: int = 0
-    refused: int = 0
-    writes_refused: int = 0
+    max_sessions: str = str(MAX_SESSIONS or "∞")
+    sessions: int = 0
+    rejections: str = ""
     last_disconnect: str = ""
 
     @rx.event
@@ -38,9 +38,8 @@ class ServerState(rx.State):
         self.running = Feed.running
         self.trades_per_tick = Feed.trades_per_tick
         self.accepting = Access.accepting
-        self.accepted = Access.accepted
-        self.refused = Access.refused
-        self.writes_refused = Access.writes_refused
+        self.sessions = HUB.session_count
+        self.rejections = rejection_summary()
         try:
             self.tables = HUB.table_names()
             self.sizes = {name: HUB.size(name) for name in self.tables}
@@ -144,12 +143,12 @@ def _access_card() -> rx.Component:
                 on_click=rp.update("quotes", BROWSER_WRITE),
             ),
             rx.text(
-                "connections ",
-                S.accepted,
-                " accepted · ",
-                S.refused,
-                " refused (4403) · writes refused (4409): ",
-                S.writes_refused,
+                "sessions open ",
+                S.sessions,
+                " / ",
+                S.max_sessions,
+                " · refused by code (on_reject): ",
+                rx.cond(S.rejections != "", S.rejections, "none"),
                 size="2",
                 color=rx.color("gray", 11),
             ),
