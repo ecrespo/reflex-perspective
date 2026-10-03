@@ -30,9 +30,17 @@ from __future__ import annotations
 
 import asyncio
 import importlib.metadata
+import inspect
 import logging
 import threading
-from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from collections.abc import (
+    Awaitable,
+    Callable,
+    Collection,
+    Iterable,
+    Mapping,
+    Sequence,
+)
 from concurrent.futures import Executor
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
@@ -59,6 +67,14 @@ DEFAULT_PATH = "/perspective"
 
 # WebSocket close code for "policy violation" (RFC 6455 section 7.4.1).
 _WS_POLICY_VIOLATION = 1008
+# WebSocket close code for "internal error" (RFC 6455 section 7.4.1).
+_WS_INTERNAL_ERROR = 1011
+
+Authorize = Callable[[WebSocket], Awaitable[int | None] | int | None]
+"""Hook deciding whether a WebSocket may open a session.
+
+Returns ``None`` to accept, or a close code (4000-4999, or 1008) to refuse.
+"""
 
 WRITE_CLOSE_CODE = 4409
 """Default close code for a frame refused in read-only mode."""
@@ -197,6 +213,29 @@ def is_read_request(
     allowed = _verified_read_variants() if read_variants is None else read_variants
     variant = request_variant(payload)
     return variant is not None and variant in allowed
+
+
+def _valid_refusal_code(code: object) -> bool:
+    return type(code) is int and (4000 <= code <= 4999 or code == _WS_POLICY_VIOLATION)
+
+
+async def _run_authorize(authorize: Authorize, websocket: WebSocket) -> int | None:
+    """``None`` to accept, else the close code to use (1011 if the hook fails)."""
+    try:
+        result = authorize(websocket)
+        if inspect.isawaitable(result):
+            result = await result
+    except Exception:
+        logger.exception("Perspective websocket authorize hook failed")
+        return _WS_INTERNAL_ERROR
+    if result is None:
+        return None
+    if not _valid_refusal_code(result):
+        logger.error(
+            "Perspective authorize hook returned invalid close code %r", result
+        )
+        return _WS_INTERNAL_ERROR
+    return result
 
 
 def _default_allowed_origins() -> Sequence[str]:
@@ -362,6 +401,8 @@ class PerspectiveHub:
         websocket: WebSocket,
         executor: Executor | None = None,
         allowed_origins: Sequence[str] | None = None,
+        *,
+        authorize: Authorize | None = None,
     ) -> None:
         """Run a Perspective session over a Starlette WebSocket.
 
@@ -376,6 +417,13 @@ class PerspectiveHub:
                 Reflex event loop.
             allowed_origins: Browser origins allowed to connect. ``None``
                 reuses Reflex's ``cors_allowed_origins``; ``"*"`` allows any.
+            authorize: Called with the WebSocket after the ``Origin`` check and
+                before any Perspective session exists (sync or async). Return
+                ``None`` to accept or a close code (4000-4999, or 1008) to
+                refuse: the socket is then accepted and closed with that code
+                so the browser sees it (a pre-accept close becomes an HTTP 403
+                and the code is lost). A hook that raises or returns another
+                code closes with 1011.
         """
         allowed = (
             _default_allowed_origins() if allowed_origins is None else allowed_origins
@@ -385,6 +433,13 @@ class PerspectiveHub:
             logger.warning("Rejected Perspective websocket from origin %r", origin)
             await websocket.close(code=_WS_POLICY_VIOLATION)
             return
+
+        if authorize is not None:
+            refusal = await _run_authorize(authorize, websocket)
+            if refusal is not None:
+                await websocket.accept()
+                await websocket.close(code=refusal)
+                return
 
         loop = asyncio.get_running_loop()
         outbox: asyncio.Queue[bytes | None] = asyncio.Queue()
@@ -436,17 +491,22 @@ class PerspectiveHub:
         path: str = DEFAULT_PATH,
         executor: Executor | None = None,
         allowed_origins: Sequence[str] | None = None,
+        *,
+        authorize: Authorize | None = None,
     ) -> Starlette:
         """A Starlette app exposing this hub's WebSocket at ``path``.
 
         Pass it to ``rx.App(api_transformer=...)``; Reflex mounts itself below
         it, so all regular routes keep working. See :meth:`serve` for
-        ``executor`` and ``allowed_origins``.
+        ``executor``, ``allowed_origins`` and ``authorize``.
         """
 
         async def endpoint(websocket: WebSocket) -> None:
             await self.serve(
-                websocket, executor=executor, allowed_origins=allowed_origins
+                websocket,
+                executor=executor,
+                allowed_origins=allowed_origins,
+                authorize=authorize,
             )
 
         return Starlette(routes=[WebSocketRoute(path, endpoint)])

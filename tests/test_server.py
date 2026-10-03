@@ -1,12 +1,19 @@
 """Tests for reflex_perspective.server (requires perspective-python)."""
 
+import asyncio
+import importlib.metadata
+import logging
+import threading
+
 import pytest
 
 perspective = pytest.importorskip("perspective")
 
 from starlette.testclient import TestClient  # noqa: E402
+from starlette.websockets import WebSocket, WebSocketDisconnect  # noqa: E402
 
 from reflex_perspective import server as ps  # noqa: E402
+from reflex_perspective.viewer import PERSPECTIVE_VERSION  # noqa: E402
 
 
 def make_hub():
@@ -191,8 +198,6 @@ def test_origin_allowed():
 
 
 def test_websocket_rejects_foreign_origin():
-    from starlette.websockets import WebSocketDisconnect
-
     app = make_hub().asgi_app("/perspective", allowed_origins=["http://app.test"])
     with TestClient(app) as client:
         with client.websocket_connect(
@@ -273,3 +278,150 @@ def test_read_variant_table_and_close_code():
     assert not reads & set(ps.WRITE_VARIANT_NAMES)
     assert set(ps.WRITE_VARIANT_NAMES) == {27, 28, 31, 32, 33, 38}
     assert ps.WRITE_CLOSE_CODE == 4409
+
+
+# ------------------------------------------------------------ version contract
+def test_variant_contract_matches_pinned_version():
+    """REQ-VER-003: the official client of the pinned version matches the table."""
+    assert importlib.metadata.version("perspective-python") == PERSPECTIVE_VERSION
+    assert PERSPECTIVE_VERSION in ps.READ_VARIANTS
+    reads = ps.READ_VARIANTS[PERSPECTIVE_VERSION]
+    for name in READS:
+        assert FRAMES[name][1] in reads, name
+    for name in WRITES:
+        variant = FRAMES[name][1]
+        assert variant not in reads and variant in ps.WRITE_VARIANT_NAMES, name
+
+
+# ------------------------------------------------------------------- authorize
+class SpyServer:
+    """Real ``perspective.Server`` that counts sessions created through it."""
+
+    def __init__(self):
+        self.real = perspective.Server()
+        self.sessions = 0
+
+    def new_session(self, send):
+        self.sessions += 1
+        return self.real.new_session(send)
+
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
+
+def live_client(ws):
+    """Official client speaking over a test WebSocket (responses on a thread)."""
+    client = perspective.Client(lambda req: ws.send_bytes(bytes(req)))
+
+    def reader():
+        while True:
+            try:
+                client.handle_response(ws.receive_bytes())
+            except Exception:  # noqa: BLE001 - socket closed
+                return
+
+    threading.Thread(target=reader, daemon=True).start()
+    return client
+
+
+def close_code(ws) -> int:
+    with pytest.raises(WebSocketDisconnect) as exc:
+        ws.receive_bytes()
+    return exc.value.code
+
+
+def test_authorize_rejects_before_session():
+    """REQ-SRV-010/011: a refused socket is accepted, closed with the hook's
+    code, and never gets a Perspective session."""
+    hub = ps.PerspectiveHub(SpyServer())
+    seen = []
+
+    def deny(websocket):
+        seen.append(websocket)
+        return 4401
+
+    app = hub.asgi_app("/perspective", authorize=deny)
+    with TestClient(app) as client, client.websocket_connect("/perspective") as ws:
+        assert close_code(ws) == 4401
+    assert isinstance(seen[0], WebSocket)
+    assert hub.server.sessions == 0
+
+
+@pytest.mark.parametrize("asynchronous", [False, True], ids=["sync", "async"])
+def test_authorize_async_and_sync(asynchronous):
+    """REQ-SRV-010: sync and async hooks returning None let the session run."""
+
+    def allow(websocket):
+        return None
+
+    async def allow_async(websocket):
+        await asyncio.sleep(0)
+        return None
+
+    hub = ps.PerspectiveHub(SpyServer())
+    hub.table([{"x": 1}, {"x": 2}], name="t")
+    hook = allow_async if asynchronous else allow
+    app = hub.asgi_app("/perspective", authorize=hook)
+    with TestClient(app) as client, client.websocket_connect("/perspective") as ws:
+        assert live_client(ws).open_table("t").size() == 2
+    assert hub.server.sessions == 1
+
+
+def test_authorize_accepts_policy_violation_code():
+    """REQ-SRV-011: 1008 is a valid refusal code besides 4000-4999."""
+    app = make_hub().asgi_app("/perspective", authorize=lambda ws: 1008)
+    with TestClient(app) as client, client.websocket_connect("/perspective") as ws:
+        assert close_code(ws) == 1008
+
+
+def test_authorize_error_closes_1011(caplog):
+    """REQ-SRV-012: a failing hook closes with 1011, is logged, no session."""
+
+    def boom(websocket):
+        raise RuntimeError("auth backend down")
+
+    hub = ps.PerspectiveHub(SpyServer())
+    app = hub.asgi_app("/perspective", authorize=boom)
+    with (
+        caplog.at_level(logging.ERROR, logger="reflex_perspective.server"),
+        TestClient(app) as client,
+        client.websocket_connect("/perspective") as ws,
+    ):
+        assert close_code(ws) == 1011
+    assert hub.server.sessions == 0
+    assert any(r.exc_info for r in caplog.records)
+
+
+@pytest.mark.parametrize("code", [1000, 3999, 5000, True, "4401"])
+def test_authorize_invalid_code_closes_1011(code, caplog):
+    """REQ-SRV-012: codes outside 4000-4999 (except 1008) close with 1011."""
+    hub = ps.PerspectiveHub(SpyServer())
+    app = hub.asgi_app("/perspective", authorize=lambda ws: code)
+    with (
+        caplog.at_level(logging.ERROR, logger="reflex_perspective.server"),
+        TestClient(app) as client,
+        client.websocket_connect("/perspective") as ws,
+    ):
+        assert close_code(ws) == 1011
+    assert hub.server.sessions == 0
+    assert caplog.records
+
+
+def test_origin_checked_before_authorize():
+    """REQ-SRV-010 (DD-005): a foreign origin is refused before the hook runs."""
+    calls = []
+    app = make_hub().asgi_app(
+        "/perspective",
+        allowed_origins=["http://app.test"],
+        authorize=lambda ws: calls.append(ws),
+    )
+    with (
+        TestClient(app) as client,
+        pytest.raises(WebSocketDisconnect) as exc,
+        client.websocket_connect(
+            "/perspective", headers={"origin": "http://evil.test"}
+        ),
+    ):
+        pass
+    assert exc.value.code == 1008
+    assert calls == []

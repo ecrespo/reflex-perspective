@@ -22,7 +22,7 @@
   → True, escrituras → False), frame `size`+33 → False, variante 99 → False, varint truncado y
   longitud excedida → `request_variant` = `None`.
 
-### [ ] T-002 · Prueba de contrato atada a la versión [P con T-003]
+### [x] 2026-10-03 T-002 · Prueba de contrato atada a la versión [P con T-003]
 - **Qué**: `test_variant_contract_matches_pinned_version`: con `perspective.Client` en proceso,
   ejecutar cada operación de lectura y escritura, capturar su variante y compararla con la
   tabla; afirmar `importlib.metadata.version("perspective-python") == PERSPECTIVE_VERSION` y que
@@ -32,7 +32,7 @@
 - **Done**: `uv run pytest -k contract` en verde; cambiar `PERSPECTIVE_VERSION` a `"9.9.9"` en
   local lo hace fallar.
 
-### [ ] T-003 · `authorize` en `serve()` [P con T-002]
+### [x] 2026-10-03 T-003 · `authorize` en `serve()` [P con T-002]
 - **Qué**: parámetro sólo-palabra-clave; orden DD-005; aceptar y cerrar con el código (DD-006);
   excepción o código inválido → 1011 con log (REQ-SRV-012); acepta síncrono y asíncrono.
 - **REQ**: REQ-SRV-010, REQ-SRV-011, REQ-SRV-012
