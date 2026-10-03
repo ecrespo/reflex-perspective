@@ -1,8 +1,8 @@
 # specs/ — verdad actual de `reflex-perspective`
 
 Nivel de rigor: **spec-anchored**. Las specs viven en el repo, versionadas con el código.
-`specs/` describe lo que la librería **hace hoy** (línea base: `0.1.0`, Perspective `5.5.1`,
-Reflex `0.9.12`). Todo cambio entra como propuesta en [`../changes/`](../changes/) y, al
+`specs/` describe lo que la librería **hace hoy** (`0.2.0`, Perspective `5.5.1`, Reflex
+`0.9.12`; línea base `0.1.0` + los cambios archivados en `changes/_archivo/`). Todo cambio entra como propuesta en [`../changes/`](../changes/) y, al
 publicarse la versión que lo implementa, se pliega aquí en el mismo PR.
 
 | Artefacto | Archivo | Qué cubre |

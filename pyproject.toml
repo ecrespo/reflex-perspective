@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reflex-perspective"
-version = "0.1.0"
+version = "0.2.0"
 description = "Perspective for Reflex: a WebAssembly analytics viewer (datagrid + WebGL charts) for large and streaming datasets, with client-only, server-only and replicated modes."
 readme = "README.md"
 license = "Apache-2.0"

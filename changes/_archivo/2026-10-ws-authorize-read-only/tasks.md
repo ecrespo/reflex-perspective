@@ -85,7 +85,7 @@
 - **Done**: README revisado; `grep -n "read_only\|authorize" README.md` muestra ambos;
   `CHANGELOG.md` existe.
 
-### [ ] T-008 · Plegar el delta a `specs/` y versionar
+### [x] 2026-10-03 T-008 · Plegar el delta a `specs/` y versionar
 - **Qué**: aplicar ADDED/MODIFIED a PRD, API y Tech Design; estado de `proposal.md` →
   implementada; `version`/`__version__` → `0.2.0`; mover la carpeta a `changes/_archivo/`.
 - **REQ**: — (Art. 7, Definition of Done)
@@ -127,3 +127,4 @@ SHOULD diferidos: P-02 (reintentos del puente ante 44xx), P-03 (tope de sesiones
 | 2026-10-03 | T-005 | hecha | Validaciones al construir; clasificador en `__all__` |
 | 2026-10-03 | T-006 | hecha | Chrome headless (Playwright) sobre la demo con `PERSPECTIVE_DEMO_READ_ONLY=1`, `/server`: cambio de plugin, `group_by`, filtro, orden, expand/collapse/`set_depth`, panel de ajustes, `to_csv`, `trades` → modo `server`, cierre de pestaña. Variantes enviadas por el navegador: 3, 4, 5, 6, 7, 9, 11, 12, 13, 14, 15, 16, 18, 19, 21, 22, 23, 24, 25 — **todas en la tabla**, 0 cierres 4409. Botón "Write from the browser" (`rp.update`, variante 33): 4409 + `warning` en sólo lectura; aplicado sin cierre en modo escribible. En lugar de `/api` (visor sólo cliente) se usó la tarjeta *Access* de `/server` |
 | 2026-10-03 | T-007 | hecha | README *Access control*, `CHANGELOG.md` (0.2.0 sin fecha hasta el release) |
+| 2026-10-03 | T-008 | hecha | Delta plegado en PRD/API/diseño técnico; `0.2.0`; carpeta en `_archivo/`. CI en GitHub: pendiente del push |

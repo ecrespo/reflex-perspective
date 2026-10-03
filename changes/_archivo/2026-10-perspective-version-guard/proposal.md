@@ -1,6 +1,6 @@
 # Propuesta — Guardia de versiones de Perspective
 
-> Estado: **aprobada** (Ernesto Crespo, 2026-10-03) · Fecha: 2026-10-03 · Autor: Ernesto Crespo (mantenedor)
+> Estado: **implementada** (0.2.0, 2026-10-03; aprobada por Ernesto Crespo el 2026-10-03) · Fecha: 2026-10-03 · Autor: Ernesto Crespo (mantenedor)
 > Specs base afectadas: `specs/prd/reflex-perspective.md` §4.3, `specs/constitution.md` Art. 3
 > Versión objetivo: **0.2.0** (junto con `2026-10-ws-authorize-read-only`)
 

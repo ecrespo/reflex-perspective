@@ -10,14 +10,17 @@ Orden de implementación por fases: [`plan.md`](plan.md).
 
 ## Abiertos
 
-| Carpeta | Versión | Estado | Resumen |
-|---|---|---|---|
-| [`2026-10-ws-authorize-read-only/`](2026-10-ws-authorize-read-only/) | 0.2.0 | aprobada · Analyze: listo | `authorize` y `read_only` en el WebSocket; clasificador estricto por lista de permitidos. Origen: borrador de la consola de CuidaSalud (DD-017) |
-| [`2026-10-perspective-version-guard/`](2026-10-perspective-version-guard/) | 0.2.0 | aprobada | CI verifica que npm y `perspective-python` estén en la misma versión; Dependabot deja de subir `perspective-python` |
+Ninguno.
+
+## Archivados
+
+| Carpeta | Versión | Resumen |
+|---|---|---|
+| [`2026-10-ws-authorize-read-only/`](_archivo/2026-10-ws-authorize-read-only/) | 0.2.0 | `authorize` y `read_only` en el WebSocket; clasificador estricto por lista de permitidos |
+| [`2026-10-perspective-version-guard/`](_archivo/2026-10-perspective-version-guard/) | 0.2.0 | CI verifica que npm y `perspective-python` estén en la misma versión; Dependabot deja de subir `perspective-python` |
 
 ## Diferidos (sin carpeta aún)
 
-- Puente JSX: no reintentar ante cierres 4400–4499 y pasar el código a `on_disconnect`
-  (P-02 / A-08).
-- Subir Perspective a la versión que publique `table_describe_req` (41): seguir
-  `specs/runbooks/perspective-upgrade.md` cuando salga.
+Ver la fase 9 de [`plan.md`](plan.md): cierres 44xx en el puente (P-02 / A-08 / A-09), tope de
+sesiones y `on_reject` (P-03 / A-11) y la subida de Perspective cuando se publique
+`table_describe_req` (41), siguiendo `specs/runbooks/perspective-upgrade.md`.

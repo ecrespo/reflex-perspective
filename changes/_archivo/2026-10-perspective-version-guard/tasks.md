@@ -15,7 +15,7 @@
 - **Archivos**: `.github/dependabot.yml`
 - **Done**: el archivo valida (pestaña *Insights → Dependency graph → Dependabot* sin errores).
 
-### [ ] V-003 · Plegar el delta
+### [x] 2026-10-03 V-003 · Plegar el delta
 - **Qué**: REQ-VER-004/005 al PRD; enmienda del Art. 3 en la constitución (tabla de enmiendas).
 - **Depende de**: V-001, V-002
 - **Done**: `grep -n "REQ-VER-00[45]" specs/prd/reflex-perspective.md` encuentra ambos.

@@ -1,8 +1,8 @@
 # Plan de implementación — 0.2.0 y diferidos
 
 > Fecha: 2026-10-03 · Rama de trabajo: `feature/0.2.0` (sale de `develop`, vuelve por PR)
-> Cambios: [`2026-10-ws-authorize-read-only/`](2026-10-ws-authorize-read-only/),
-> [`2026-10-perspective-version-guard/`](2026-10-perspective-version-guard/)
+> Cambios (archivados en 0.2.0): [`2026-10-ws-authorize-read-only/`](_archivo/2026-10-ws-authorize-read-only/),
+> [`2026-10-perspective-version-guard/`](_archivo/2026-10-perspective-version-guard/)
 > Regla: cada fase se implementa con TDD y se espera aprobación antes de la siguiente.
 
 Estados: `[ ]` pendiente · `[~]` en curso · `[x]` hecha · `[!]` bloqueada.
@@ -16,7 +16,7 @@ Estados: `[ ]` pendiente · `[~]` en curso · `[x]` hecha · `[!]` bloqueada.
 | 4 · `read_only` | `[x]` | T-004 | Clasificación por frame, 4409, guardia de versión, `read_variants` | 2, 3 | Pruebas `test_read_only_*` en verde |
 | 5 · API pública | `[x]` | T-005 | Parámetros en `asgi_app`/`perspective_api`/`mount`; validaciones; `__all__` | 3, 4 | `test_defaults_unchanged`, ruff limpio |
 | 6 · Validación y docs | `[x]` | T-006 ∥ T-007 | Pase en navegador con la demo en sólo lectura; README; `CHANGELOG.md` | 5 | Sin 4409 en lectura; variantes anotadas |
-| 7 · Plegado SDD | `[ ]` | T-008, V-003 | Deltas en `specs/`; `0.2.0`; carpetas a `_archivo/` | 1, 6 | Quality y Security en verde; REQ en `specs/` |
+| 7 · Plegado SDD | `[x]` | T-008, V-003 | Deltas en `specs/`; `0.2.0`; carpetas a `_archivo/` | 1, 6 | Quality y Security en verde; REQ en `specs/` |
 | 8 · Release 0.2.0 | `[ ]` | T-009 | PR a `main`, tag `v0.2.0` (el tag lo empuja el mantenedor) | 7 | 0.2.0 en PyPI y release en GitHub |
 | 9 · Diferidos | `[ ]` | ver abajo | Cambios posteriores a 0.2.0, cada uno con su propuesta | 8 | Cada sub-fase publicada y plegada |
 
@@ -42,3 +42,4 @@ sólo se implementa tras aprobarla.
 | 2026-10-03 | 4 | hecha | `read_only`/`write_close_code`/`read_variants` en `serve()` y `asgi_app()`; 22 pruebas rojo → verde; control: el frame `size`+`update` real modifica la tabla sin `read_only` (A-01 reproducido) y se rechaza con él; 8 corridas seguidas sin intermitencias |
 | 2026-10-03 | 5 | hecha | Parámetros en `perspective_api`/`mount`; `ValueError` (`write_close_code`) y `RuntimeError` (versión) al construir; clasificador en `__all__`; 22 pruebas rojo → verde. Suite 160 en 3.13 y 16 + 2 omitidos en 3.10; wheel y `reflex compile` de la demo OK |
 | 2026-10-03 | 6 | hecha | Demo: tarjeta *Access* en `/server` (switch de `authorize` → 4403, contadores, botón de escritura) y `PERSPECTIVE_DEMO_READ_ONLY=1`; README (*Access control*) y `CHANGELOG.md`; 10 pruebas rojo → verde. Pase en Chrome headless: sin variantes fuera de la tabla; escritura del navegador → 4409 en sólo lectura y aplicada en modo escribible |
+| 2026-10-03 | 7 | hecha | Deltas plegados en PRD/API/diseño técnico 1.1; enmienda Art. 3 (aprobada por el mantenedor); `0.2.0` + `uv.lock`; cambios en `_archivo/`; 15 pruebas rojo → verde (tabla §2.2 = código) |

@@ -5,7 +5,8 @@
 Perspective publica a la vez los paquetes npm `@perspective-dev/*` y `perspective-python`, y
 cambia su protocolo protobuf entre versiones. Por eso se suben **juntos y a mano**; Dependabot
 no debe proponer `perspective-python` por separado
-(ver [`changes/2026-10-perspective-version-guard/`](../../changes/2026-10-perspective-version-guard/)).
+(CI lo verifica con `scripts/check_perspective_versions.py`; ver
+[`changes/_archivo/2026-10-perspective-version-guard/`](../../changes/_archivo/2026-10-perspective-version-guard/)).
 
 ## 1. Detectar una versión nueva
 

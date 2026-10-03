@@ -79,3 +79,48 @@ def test_changelog_lists_releases():
     assert "## [0.2.0]" in changelog
     assert "## [0.1.0]" in changelog
     assert "### Security" in changelog
+
+
+FOLDED_REQS = [f"REQ-SRV-0{n}" for n in range(10, 19)] + [
+    "REQ-VER-003",
+    "REQ-VER-004",
+    "REQ-VER-005",
+]
+
+
+@pytest.mark.parametrize("req", FOLDED_REQS)
+def test_prd_contains_folded_requirement(req):
+    """Art. 7: implemented deltas are folded into the PRD."""
+    prd = (SPECS / "prd" / "reflex-perspective.md").read_text(encoding="utf-8")
+    assert f"**{req}**" in prd
+
+
+def test_api_spec_read_table_matches_code():
+    """REQ-SRV-013 / Art. 3: the API spec's read table is the code's table."""
+    pytest.importorskip("perspective")
+    from reflex_perspective import server as ps
+    from reflex_perspective.viewer import PERSPECTIVE_VERSION
+
+    api = (SPECS / "api" / "server-api-v1.md").read_text(encoding="utf-8")
+    section = api.split("### 2.2", 1)[1].split("\n### ", 1)[0].split("Escrituras", 1)[0]
+    documented = {int(n) for n in re.findall(r"\|\s*(\d+)\s*\|\s*`\w+_req`", section)}
+    assert documented == ps.READ_VARIANTS[PERSPECTIVE_VERSION]
+
+
+def test_newest_changelog_entry_is_the_package_version():
+    """Art. 4/7: the version being released has the newest CHANGELOG entry."""
+    tomllib = pytest.importorskip("tomllib")
+
+    version = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    newest = re.search(r"^## \[(\d+\.\d+\.\d+)\]", changelog, re.MULTILINE)
+    assert newest and newest.group(1) == version
+
+
+def test_archived_changes_are_implemented():
+    """Art. 7: only implemented proposals move to changes/_archivo/."""
+    archive = CHANGES / "_archivo"
+    archived = sorted(p for p in archive.iterdir() if p.is_dir())
+    assert archived, "no archived changes"
+    for change in archived:
+        assert proposal_state(change) == "implementada", change.name

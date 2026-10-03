@@ -1,6 +1,6 @@
 # Constitución — reflex-perspective
 
-> Versión 1.0 · Ratificada: 2026-10-03 · Última enmienda: —
+> Versión 1.1 · Ratificada: 2026-10-03 · Última enmienda: 2026-10-03 (Art. 3)
 > Ámbito: repositorio `ecrespo/reflex-perspective` (librería, demo y workflows)
 
 ## Artículos
@@ -24,7 +24,8 @@ lo que de verdad manda un navegador.*
 EL SISTEMA DEBERÁ fijar la **misma versión exacta** en `PERSPECTIVE_VERSION`
 (`viewer.py`, paquetes npm `@perspective-dev/*`) y en `perspective-python` (extras `server` y
 `dev` de `pyproject.toml`). Toda subida DEBERÁ seguir
-[`runbooks/perspective-upgrade.md`](runbooks/perspective-upgrade.md).
+[`runbooks/perspective-upgrade.md`](runbooks/perspective-upgrade.md). CI DEBERÁ verificar la
+igualdad de los pines (REQ-VER-004).
 *Racional: cliente y servidor comparten un protocolo protobuf que no tiene compatibilidad
 entre versiones; el modo sólo lectura depende de la numeración de ese protocolo.*
 
@@ -71,6 +72,7 @@ coincidir (lo verifica CI).
 | Fecha | Artículo | Cambio | Razón | Aprobado por |
 |---|---|---|---|---|
 | 2026-10-03 | — | Versión inicial | Línea base SDD del repo | Ernesto Crespo (2026-10-03) |
+| 2026-10-03 | Art. 3 | CI verifica la igualdad de los pines de Perspective (REQ-VER-004) | De convención a regla verificada (`changes/_archivo/2026-10-perspective-version-guard/`) | Ernesto Crespo (2026-10-03) |
 
 ## Constitution check
 
