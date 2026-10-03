@@ -194,10 +194,22 @@ def request_variant(payload: bytes) -> int | None:
     return variant
 
 
+def _installed_perspective_version() -> str:
+    return importlib.metadata.version("perspective-python")
+
+
 def _verified_read_variants() -> frozenset[int]:
-    """Read table of the installed ``perspective-python``."""
-    version = importlib.metadata.version("perspective-python")
-    return READ_VARIANTS[version]
+    """Read table of the installed ``perspective-python`` (fails closed)."""
+    version = _installed_perspective_version()
+    try:
+        return READ_VARIANTS[version]
+    except KeyError:
+        msg = (
+            f"read_only=True has no verified read table for perspective-python "
+            f"{version} (known: {', '.join(sorted(READ_VARIANTS))}). Pass "
+            "read_variants= explicitly or upgrade reflex-perspective."
+        )
+        raise RuntimeError(msg) from None
 
 
 def is_read_request(
@@ -403,6 +415,9 @@ class PerspectiveHub:
         allowed_origins: Sequence[str] | None = None,
         *,
         authorize: Authorize | None = None,
+        read_only: bool = False,
+        write_close_code: int = WRITE_CLOSE_CODE,
+        read_variants: Collection[int] | None = None,
     ) -> None:
         """Run a Perspective session over a Starlette WebSocket.
 
@@ -424,7 +439,24 @@ class PerspectiveHub:
                 so the browser sees it (a pre-accept close becomes an HTTP 403
                 and the code is lost). A hook that raises or returns another
                 code closes with 1011.
+            read_only: Forward only frames carrying exactly one known read
+                request; anything else (writes, unknown or malformed frames)
+                closes the socket with ``write_close_code``. Writes from
+                Python (``hub.update``...) keep working.
+            write_close_code: Close code for a refused frame (4000-4999).
+            read_variants: Allowed ``Request`` variants in read-only mode.
+                ``None`` uses :data:`READ_VARIANTS` for the installed
+                ``perspective-python`` and raises ``RuntimeError`` if that
+                version has no verified table.
         """
+        allowed_reads: frozenset[int] | None = None
+        if read_only:
+            allowed_reads = (
+                _verified_read_variants()
+                if read_variants is None
+                else frozenset(read_variants)
+            )
+
         allowed = (
             _default_allowed_origins() if allowed_origins is None else allowed_origins
         )
@@ -475,6 +507,19 @@ class PerspectiveHub:
                     # Only binary protocol frames are meaningful; the engine
                     # aborts the process on empty input, so never forward it.
                     continue
+                if allowed_reads is not None and not is_read_request(
+                    payload, allowed_reads
+                ):
+                    variant = request_variant(payload)
+                    logger.warning(
+                        "Refused Perspective request in read-only mode: variant %s (%s)",
+                        variant,
+                        WRITE_VARIANT_NAMES.get(variant, "unknown")
+                        if variant is not None
+                        else "unreadable",
+                    )
+                    await websocket.close(code=write_close_code)
+                    break
                 # Requests are awaited one at a time, so ordering is preserved.
                 await loop.run_in_executor(executor, session.handle_request, payload)
         except WebSocketDisconnect:
@@ -493,6 +538,9 @@ class PerspectiveHub:
         allowed_origins: Sequence[str] | None = None,
         *,
         authorize: Authorize | None = None,
+        read_only: bool = False,
+        write_close_code: int = WRITE_CLOSE_CODE,
+        read_variants: Collection[int] | None = None,
     ) -> Starlette:
         """A Starlette app exposing this hub's WebSocket at ``path``.
 
@@ -507,6 +555,9 @@ class PerspectiveHub:
                 executor=executor,
                 allowed_origins=allowed_origins,
                 authorize=authorize,
+                read_only=read_only,
+                write_close_code=write_close_code,
+                read_variants=read_variants,
             )
 
         return Starlette(routes=[WebSocketRoute(path, endpoint)])

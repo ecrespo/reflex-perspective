@@ -425,3 +425,153 @@ def test_origin_checked_before_authorize():
         pass
     assert exc.value.code == 1008
     assert calls == []
+
+
+# ------------------------------------------------------------------- read_only
+def seeded_hub(server=None):
+    """Hub with the tables the recorded frames point at (``t`` and ``o``)."""
+    hub = ps.PerspectiveHub(server)
+    hub.table([{"id": 1, "x": 1.0}], name="t", index="id")
+    hub.table([{"id": 1}], name="o")
+    hub.table([{"id": 1, "y": 2}], name="p")
+    return hub
+
+
+def snapshot(hub):
+    names = sorted(hub.client.get_hosted_table_names())
+    return names, hub.query("t", sort=[["id", "asc"]])
+
+
+def read_only_app(hub, **kw):
+    return hub.asgi_app("/perspective", read_only=True, **kw)
+
+
+# A real read frame followed by a real write frame: protobuf merges them, the
+# oneof keeps the last variant, so the engine would run the update (A-01).
+SMUGGLED_REAL = frame("size") + frame("update")
+
+
+def test_smuggled_frame_writes_without_read_only():
+    """Control for REQ-SRV-014: the smuggled frame really is a write."""
+    hub = seeded_hub()
+    with (
+        TestClient(hub.asgi_app("/perspective")) as client,
+        client.websocket_connect("/perspective") as ws,
+    ):
+        ws.send_bytes(SMUGGLED_REAL)
+        ws.receive_bytes()
+    assert hub.size("t") == 2
+
+
+def test_read_only_allows_reads():
+    """REQ-SRV-013: the official client reads, views and subscribes."""
+    hub = seeded_hub(SpyServer())
+    with (
+        TestClient(read_only_app(hub)) as client,
+        client.websocket_connect("/perspective") as ws,
+    ):
+        c = live_client(ws)
+        assert sorted(c.get_hosted_table_names()) == ["o", "p", "t"]
+        t = c.open_table("t")
+        assert t.size() == 1
+        assert t.schema() == {"id": "integer", "x": "float"}
+        v = t.view(group_by=["id"])
+        assert v.to_arrow()
+        assert "x" in v.to_csv()
+        v.expand(0)
+        v.collapse(0)
+        v.on_update(lambda *a: None)
+        v.on_remove(lambda *a: None)
+        v.delete()
+        assert t.size() == 1  # still connected
+    assert hub.server.sessions == 1
+
+
+@pytest.mark.parametrize("name", WRITES)
+def test_read_only_rejects_each_write(name):
+    """REQ-SRV-014: every write closes with 4409 and changes nothing."""
+    hub = seeded_hub()
+    before = snapshot(hub)
+    with (
+        TestClient(read_only_app(hub)) as client,
+        client.websocket_connect("/perspective") as ws,
+    ):
+        ws.send_bytes(frame(name))
+        assert close_code(ws) == 4409
+    assert snapshot(hub) == before
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [SMUGGLED_REAL, SMUGGLED_WRITE, UNKNOWN_VARIANT, *MALFORMED.values()],
+    ids=["smuggled_real", "smuggled", "unknown", *MALFORMED],
+)
+def test_read_only_rejects_smuggled_unknown_and_malformed(payload):
+    """REQ-SRV-014: anything that is not exactly one known read is refused."""
+    hub = seeded_hub()
+    before = snapshot(hub)
+    with (
+        TestClient(read_only_app(hub)) as client,
+        client.websocket_connect("/perspective") as ws,
+    ):
+        ws.send_bytes(payload)
+        assert close_code(ws) == 4409
+    assert snapshot(hub) == before
+
+
+def test_read_only_logs_variant_not_content(caplog):
+    """REQ-SRV-014: the refusal is logged by number and name, never the frame."""
+    hub = seeded_hub()
+    payload = frame("update")
+    with (
+        caplog.at_level(logging.WARNING, logger="reflex_perspective.server"),
+        TestClient(read_only_app(hub)) as client,
+        client.websocket_connect("/perspective") as ws,
+    ):
+        ws.send_bytes(payload)
+        close_code(ws)
+    text = "\n".join(r.getMessage() for r in caplog.records)
+    assert "33" in text and "table_update_req" in text
+    assert repr(payload) not in text and payload.hex() not in text
+
+
+def test_read_only_custom_close_code():
+    """REQ-SRV-014: ``write_close_code`` replaces 4409."""
+    hub = seeded_hub()
+    with (
+        TestClient(read_only_app(hub, write_close_code=4403)) as client,
+        client.websocket_connect("/perspective") as ws,
+    ):
+        ws.send_bytes(frame("update"))
+        assert close_code(ws) == 4403
+
+
+def test_read_only_unverified_version_fails(monkeypatch):
+    """REQ-SRV-015: no verified read table -> RuntimeError before accepting."""
+    monkeypatch.setattr(ps, "_installed_perspective_version", lambda: "9.9.9")
+    untouched = object()  # any attribute access would raise AttributeError
+    with pytest.raises(RuntimeError, match=r"9\.9\.9"):
+        asyncio.run(make_hub().serve(untouched, read_only=True))
+
+
+def test_read_only_unverified_version_with_read_variants_ok(monkeypatch):
+    """REQ-SRV-015: an explicit ``read_variants`` allows an unverified version."""
+    monkeypatch.setattr(ps, "_installed_perspective_version", lambda: "9.9.9")
+    hub = seeded_hub()
+    app = read_only_app(hub, read_variants=ps.READ_VARIANTS["5.5.1"])
+    with TestClient(app) as client, client.websocket_connect("/perspective") as ws:
+        assert live_client(ws).open_table("t").size() == 1
+
+
+def test_read_only_python_writes_still_work():
+    """REQ-SRV-016: read-only limits socket clients, not the backend."""
+    hub = seeded_hub()
+    with (
+        TestClient(read_only_app(hub)) as client,
+        client.websocket_connect("/perspective") as ws,
+    ):
+        t = live_client(ws).open_table("t")
+        hub.update("t", [{"id": 2, "x": 2.0}])
+        assert t.size() == 2
+        hub.clear("t")
+        assert t.size() == 0

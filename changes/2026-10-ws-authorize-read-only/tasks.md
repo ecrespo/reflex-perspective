@@ -42,7 +42,7 @@
   `test_authorize_async_and_sync`, `test_authorize_error_closes_1011`,
   `test_authorize_invalid_code_closes_1011` en verde.
 
-### [ ] T-004 · `read_only` en `serve()`
+### [x] 2026-10-03 T-004 · `read_only` en `serve()`
 - **Qué**: clasificar cada frame binario antes del executor; rechazo → `logger.warning` con
   número y nombre de variante, cierre con `write_close_code`, `session.close()`; comprobación de
   versión al entrar (REQ-SRV-015); `read_variants` explícito.
