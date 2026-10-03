@@ -10,7 +10,10 @@ Orden de implementación por fases: [`plan.md`](plan.md).
 
 ## Abiertos
 
-Ninguno.
+| Carpeta | Versión | Estado | Resumen |
+|---|---|---|---|
+| [`2026-10-bridge-close-codes/`](2026-10-bridge-close-codes/) | 0.3.0 | aprobada | El puente no reintenta cierres 4400–4499 (salvo 4429), avisa en consola y `on_disconnect(url, code)` (P-02, A-08, A-09) |
+| [`2026-10-session-cap-on-reject/`](2026-10-session-cap-on-reject/) | 0.3.0 | aprobada | `max_sessions` (4429), `on_reject(code, websocket)` y `hub.session_count` (P-03, A-11) |
 
 ## Archivados
 
@@ -21,6 +24,6 @@ Ninguno.
 
 ## Diferidos (sin carpeta aún)
 
-Ver la fase 9 de [`plan.md`](plan.md): cierres 44xx en el puente (P-02 / A-08 / A-09), tope de
-sesiones y `on_reject` (P-03 / A-11) y la subida de Perspective cuando se publique
-`table_describe_req` (41), siguiendo `specs/runbooks/perspective-upgrade.md`.
+- Subir Perspective a la versión que publique `table_describe_req` (41) (fase 9c de
+  [`plan.md`](plan.md)): bloqueado; al 2026-10-03 npm y PyPI siguen en 5.5.1. Seguir
+  `specs/runbooks/perspective-upgrade.md` cuando salga.

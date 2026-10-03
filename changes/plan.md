@@ -18,7 +18,7 @@ Estados: `[ ]` pendiente · `[~]` en curso · `[x]` hecha · `[!]` bloqueada.
 | 6 · Validación y docs | `[x]` | T-006 ∥ T-007 | Pase en navegador con la demo en sólo lectura; README; `CHANGELOG.md` | 5 | Sin 4409 en lectura; variantes anotadas |
 | 7 · Plegado SDD | `[x]` | T-008, V-003 | Deltas en `specs/`; `0.2.0`; carpetas a `_archivo/` | 1, 6 | Quality y Security en verde; REQ en `specs/` |
 | 8 · Release 0.2.0 | `[x]` | T-009 | PR a `main`, tag `v0.2.0` (el tag lo empuja el mantenedor) | 7 | 0.2.0 en PyPI y release en GitHub |
-| 9 · Diferidos | `[ ]` | ver abajo | Cambios posteriores a 0.2.0, cada uno con su propuesta | 8 | Cada sub-fase publicada y plegada |
+| 9 · Diferidos | `[~]` | ver abajo | Cambios posteriores a 0.2.0, cada uno con su propuesta | 8 | Cada sub-fase publicada y plegada |
 
 ## Fase 9 — Diferidos
 
@@ -27,8 +27,8 @@ sólo se implementa tras aprobarla.
 
 | Sub-fase | Origen | Alcance | Versión objetivo | Bloqueo |
 |---|---|---|---|---|
-| 9a · Cierres 44xx en el puente | P-02, A-08, A-09 | Envolver el WebSocket del cliente en `perspective_viewer.jsx` para leer `CloseEvent.code`; no reintentar 4400–4499; pasar el código a `on_disconnect`; aviso en la consola del navegador ante 4409 | 0.3.0 | — |
-| 9b · Tope de sesiones y rechazos | P-03, A-11 | Tope de sesiones por hub (4429) y gancho `on_reject(code)` para métricas, con valores por omisión que no cambian 0.2.0 | 0.3.0 | Confirmar con la consola de CuidaSalud que lo necesita en la librería |
+| 9a · Cierres 44xx en el puente ([`2026-10-bridge-close-codes/`](2026-10-bridge-close-codes/)) | P-02, A-08, A-09 | Envolver el WebSocket del cliente en `perspective_viewer.jsx` para leer `CloseEvent.code`; no reintentar 4400–4499; pasar el código a `on_disconnect`; aviso en la consola del navegador ante 4409 | 0.3.0 | — |
+| 9b · Tope de sesiones y rechazos ([`2026-10-session-cap-on-reject/`](2026-10-session-cap-on-reject/)) | P-03, A-11 | Tope de sesiones por hub (4429) y gancho `on_reject(code)` para métricas, con valores por omisión que no cambian 0.2.0 | 0.3.0 | — (el mantenedor aceptó la propuesta el 2026-10-03) |
 | 9c · Subida de Perspective | Diferido de `changes/README.md` | Seguir `specs/runbooks/perspective-upgrade.md`: tabla `READ_VARIANTS[<nueva>]` con 41 `table_describe_req` y 9 `reserved` | patch | Esperar a que npm y PyPI publiquen la versión con el campo 41 |
 
 ## Registro
