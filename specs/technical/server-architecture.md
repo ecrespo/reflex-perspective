@@ -1,6 +1,6 @@
 # Diseño técnico — modo servidor de reflex-perspective
 
-> Versión de la spec: 1.2 (librería `0.3.0`) · Fecha: 2026-10-03
+> Versión de la spec: 1.2 (librería `0.4.0`) · Fecha: 2026-10-24
 > PRD §4.2 · API [`../api/server-api-v1.md`](../api/server-api-v1.md)
 
 ## 1. Contexto
@@ -94,7 +94,7 @@ Ante 4400–4499 salvo 4429 registra la URL como rechazada, avisa una vez en con
 reintentos de todos los visores de esa URL hasta recargar. Alternativa descartada: sustituir
 `window.WebSocket`, que afectaría a todos los sockets de la página (incluido el de Reflex).
 
-## 4. Seguridad (estado 0.3.0)
+## 4. Seguridad (estado 0.4.0)
 
 | Amenaza | Mitigación | Hueco restante |
 |---|---|---|

@@ -18,7 +18,7 @@ large and streaming datasets.
 - All 16 bundled themes, every datagrid and chart plugin (X/Y Bar, Line, Area, Scatter, Density, Treemap, Sunburst, Heatmap, Candlestick, OHLC, Map Scatter/Line/Density).
 - SSR-safe lazy WASM bootstrap, automatic WebSocket reconnection, works in `reflex run` dev and `--env prod`.
 
-Built against **Reflex 0.9.12** and **Perspective 5.5.1** (`@perspective-dev/*` npm packages and `perspective-python`).
+Built against **Reflex 0.10.0** and **Perspective 5.5.1** (`@perspective-dev/*` npm packages and `perspective-python`).
 
 ## Installation
 
@@ -28,8 +28,8 @@ pip install "reflex-perspective[server]"  # + perspective-python for server mode
 ```
 
 The npm packages are installed by Reflex automatically on the first `reflex run`.
-The client-only component works on Python 3.10+; the `server` extra needs Python 3.11+
-(`perspective-python` 5.x only publishes `cp311-abi3` wheels).
+Requires Python 3.11+ (Reflex 0.10 dropped 3.10; `perspective-python` 5.x only publishes
+`cp311-abi3` wheels).
 
 ## Quick start (client-only)
 
@@ -331,7 +331,7 @@ uv build                           # sdist + wheel in dist/
 ```
 
 CI runs on every push and PR to `main` / `develop`: **Quality** (ruff, a JSX syntax check,
-pytest on Python 3.10–3.13, a build + `twine check` with a wheel-content check, and a
+pytest on Python 3.11–3.13, a build + `twine check` with a wheel-content check, and a
 `reflex compile` of the demo) and **Security** (CodeQL, Bandit, pip-audit, gitleaks and
 dependency review).
 

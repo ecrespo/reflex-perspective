@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import random
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 # City -> (state, region, lat, lon)
 CITIES: dict[str, tuple[str, str, float, float]] = {
@@ -195,7 +195,7 @@ class Market:
         self.trade_id = 0
 
     def tick(self, n_trades: int = 20) -> tuple[list[dict], list[dict]]:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         trades = []
         for _ in range(n_trades):
             s = self.rng.choice(SYMBOLS)
@@ -266,7 +266,7 @@ def sensors_batch(
 ) -> list[dict]:
     """One reading per sensor at logical time ``step``."""
     rng = random.Random(seed + step)
-    ts = datetime.fromtimestamp(t0 + step * 0.5, tz=timezone.utc).isoformat()
+    ts = datetime.fromtimestamp(t0 + step * 0.5, tz=UTC).isoformat()
     rows = []
     for k in range(n_sensors):
         phase = k * 0.9

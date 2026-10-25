@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`0.x`: a breaking change bumps the minor).
 
+## [0.4.0] - 2026-10-24
+
+### Breaking
+
+- Requires **Reflex 0.10.0** or newer (was 0.9.12).
+- Requires **Python 3.11** or newer: Reflex 0.10 no longer supports Python 3.10. The
+  `server` extra already needed 3.11, so it is unaffected.
+
+### Changed
+
+- CI runs the tests on Python 3.11–3.13 and sets up Node 24 for the JSX check and the
+  bridge's `node:test` suite; JavaScript actions run on Node 24.
+- Build backend requires `setuptools>=78.1.1`.
+
 ## [0.3.0] - 2026-10-03
 
 ### Added
@@ -61,6 +75,7 @@ All notable changes to this project are documented here. The format follows
   check, `perspective_api()`, `mount()`, `run_periodically()`.
 - Demo app.
 
+[0.4.0]: https://github.com/ecrespo/reflex-perspective/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ecrespo/reflex-perspective/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ecrespo/reflex-perspective/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ecrespo/reflex-perspective/releases/tag/v0.1.0

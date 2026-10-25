@@ -1,6 +1,6 @@
 # PRD — reflex-perspective
 
-> Versión de la spec: 1.2 (librería `0.3.0`) · Fecha: 2026-10-03
+> Versión de la spec: 1.3 (librería `0.4.0`) · Fecha: 2026-10-24
 > Autor: Ernesto Crespo (mantenedor) · Estado: vigente (1.0 reconstruida del código; 1.1 pliega
 > `2026-10-ws-authorize-read-only` y `2026-10-perspective-version-guard`; 1.2 pliega
 > `2026-10-bridge-close-codes` y `2026-10-session-cap-on-reject`)
@@ -128,8 +128,8 @@ Notación EARS. MUST salvo que se indique.
 
 - **REQ-VER-001**: EL SISTEMA DEBERÁ fijar los paquetes npm `@perspective-dev/*` a
   `PERSPECTIVE_VERSION` y `perspective-python` a la misma versión en los extras.
-- **REQ-VER-002**: EL SISTEMA DEBERÁ funcionar en modo cliente con Python ≥ 3.10 y en modo
-  servidor con Python ≥ 3.11.
+- **REQ-VER-002**: EL SISTEMA DEBERÁ funcionar con Python ≥ 3.11 y Reflex ≥ 0.10.0, en modo
+  cliente y en modo servidor (desde 0.4.0; antes, modo cliente con Python ≥ 3.10).
 - **REQ-VER-003** (ubicuo): EL SISTEMA DEBERÁ incluir una prueba de contrato que genere cada
   operación de lectura y de escritura con el cliente oficial de la versión pineada, compruebe
   su variante contra la tabla y falle si `PERSPECTIVE_VERSION` no tiene tabla.
@@ -144,7 +144,7 @@ Notación EARS. MUST salvo que se indique.
 - Un pivote sobre una tabla grande no bloquea el lazo de eventos de Reflex (Art. 6).
 - Compatibilidad hacia atrás en cada versión `0.x` salvo sección Breaking (Art. 4).
 
-## 6. Limitaciones conocidas (0.3.0)
+## 6. Limitaciones conocidas (0.4.0)
 
 - **Por omisión el WebSocket no autentica y es escribible** (compatibilidad con 0.1.0, Art. 4);
   `authorize` y `read_only=True` lo cierran (REQ-SRV-010…018). `read_only` no impide exportar
