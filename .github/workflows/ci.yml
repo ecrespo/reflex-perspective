@@ -17,6 +17,8 @@ concurrency:
 
 env:
   UV_LOCKED: "1"
+  # Run JavaScript actions on Node 24.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   lint:
@@ -27,6 +29,9 @@ jobs:
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: "3.13"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
       - name: Ruff lint
         run: uvx ruff@0.16.8 check --output-format=github .
       - name: Ruff format
@@ -43,15 +48,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # perspective-python only ships wheels for 3.11+, so the server tests
-        # are skipped on 3.10 (client-only component still supported there).
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        # Reflex 0.10 and perspective-python both require Python 3.11+.
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
+      - uses: actions/setup-node@v7 # tests/test_bridge_js.py runs node:test
+        with:
+          node-version: "24"
       - name: Install
         run: uv sync --extra dev
       - name: Pytest

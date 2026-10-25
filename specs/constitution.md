@@ -1,13 +1,13 @@
 # Constitución — reflex-perspective
 
-> Versión 1.1 · Ratificada: 2026-10-03 · Última enmienda: 2026-10-03 (Art. 3)
+> Versión 1.2 · Ratificada: 2026-10-03 · Última enmienda: 2026-10-24 (Art. 1, stack)
 > Ámbito: repositorio `ecrespo/reflex-perspective` (librería, demo y workflows)
 
 ## Artículos
 
 ### Art. 1 — Calidad de código
 EL EQUIPO DEBERÁ mantener en verde el workflow **Quality** (ruff `check` + `format --check`,
-chequeo de sintaxis del puente JSX con esbuild, pytest en Python 3.10–3.13, build + `twine
+chequeo de sintaxis del puente JSX con esbuild, pytest en Python 3.11–3.13, build + `twine
 check`, contenido del wheel y `reflex compile` de la demo) antes de cualquier merge a `develop`
 o `main`.
 *Racional: es una librería publicada en PyPI; un fallo llega directo a los consumidores.*
@@ -59,11 +59,11 @@ coincidir (lo verifica CI).
 
 ## Restricciones del stack
 
-- Python ≥ 3.10 para el componente; ≥ 3.11 para el extra `server` (`perspective-python` 5.x
-  sólo publica wheels `cp311-abi3`).
-- Reflex ≥ 0.9.12. Starlette (el que trae Reflex) para el WebSocket.
+- Python ≥ 3.11 (Reflex 0.10 dejó 3.10; `perspective-python` 5.x sólo publica wheels
+  `cp311-abi3`).
+- Reflex ≥ 0.10.0. Starlette (el que trae Reflex) para el WebSocket.
 - Perspective 5.5.1 (npm `@perspective-dev/*` y `perspective-python`).
-- Empaquetado: setuptools ≥ 77, `uv`. CI: GitHub Actions. Publicación: PyPI con Trusted
+- Empaquetado: setuptools ≥ 78.1.1, `uv`. CI: GitHub Actions con Node 24. Publicación: PyPI con Trusted
   Publishing al empujar un tag `vX.Y.Z`.
 - Licencia Apache-2.0.
 
@@ -73,6 +73,7 @@ coincidir (lo verifica CI).
 |---|---|---|---|---|
 | 2026-10-03 | — | Versión inicial | Línea base SDD del repo | Ernesto Crespo (2026-10-03) |
 | 2026-10-03 | Art. 3 | CI verifica la igualdad de los pines de Perspective (REQ-VER-004) | De convención a regla verificada (`changes/_archivo/2026-10-perspective-version-guard/`) | Ernesto Crespo (2026-10-03) |
+| 2026-10-24 | Art. 1, stack | pytest en 3.11–3.13; Python ≥ 3.11, Reflex ≥ 0.10.0, setuptools ≥ 78.1.1, Node 24 en CI | Reflex 0.10 exige Python 3.11 (versión 0.4.0) | Ernesto Crespo (2026-10-24) |
 
 ## Constitution check
 

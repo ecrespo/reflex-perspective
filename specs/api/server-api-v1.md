@@ -1,6 +1,6 @@
 # API — `reflex_perspective.server` v1
 
-> Versión de la spec: 1.2 (librería `0.3.0`) · Fecha: 2026-10-03
+> Versión de la spec: 1.2 (librería `0.4.0`) · Fecha: 2026-10-24
 > PRD: [`../prd/reflex-perspective.md`](../prd/reflex-perspective.md) §4.2
 
 Contrato público del módulo servidor. Requiere el extra `server`
